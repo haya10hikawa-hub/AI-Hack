@@ -221,6 +221,8 @@ export function coarsenCoordinates(
   const normalizedGridDegrees = Number(gridDegrees.toPrecision(12)).toString();
   const precisionKm = Math.round(gridDegrees * 111 * 10) / 10;
 
+  // TODO(#5): Resolve this privacy-safe grid to a coarse, user-confirmable
+  // place label. Never persist or send the original coordinates to the model.
   return {
     key: `grid:${latitudeBucket.toString(36)}:${longitudeBucket.toString(36)}:${normalizedGridDegrees}`,
     precisionKm,

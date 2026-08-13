@@ -496,6 +496,9 @@ Hero Flow が壊れた状態で Optional Feature へ進まないでください�
 production data path に demo/fake backend はありません。E2Eだけが許可された外部境界 fixture を使います。
 UI 画像は引き続き design reference で、実際の画面はユーザー自身のデータまたは正直な空状態を表示します。
 
+次の担当者は、既知の制約、優先Issue、実環境で未検証の範囲をまとめた
+[`docs/DEVELOPMENT_HANDOFF.md`](./docs/DEVELOPMENT_HANDOFF.md) から確認してください。
+
 ---
 
 ## AI HACK 2026

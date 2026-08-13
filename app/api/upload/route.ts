@@ -83,6 +83,8 @@ export async function POST(request: NextRequest) {
 
     // Return the deterministic Event/Memory checkpoint immediately. `after`
     // keeps the AI reconstruction running without blocking the upload screen.
+    // TODO(#4): Replace this best-effort continuation with a durable job. The
+    // callback is still bounded by maxDuration and cannot survive every exit.
     after(() =>
       processSequences({
         sequences: result.sequences,

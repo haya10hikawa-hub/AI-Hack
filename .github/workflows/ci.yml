@@ -22,6 +22,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # TODO(#10): Add `pnpm format:check` after the existing repository-wide
+      # formatting drift has been fixed in an isolated, reviewable change.
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test

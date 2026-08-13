@@ -70,6 +70,8 @@ export async function PATCH(request: NextRequest) {
     assertSameOrigin(request);
     const input = PatchSchema.parse(await request.json());
     if (input.useCalendar === true) {
+      // TODO(#8): Keep this fail-closed until OAuth, sync provenance, and
+      // disconnect semantics are implemented end to end.
       return errorResponse(
         409,
         "CALENDAR_NOT_CONNECTED",
@@ -78,6 +80,8 @@ export async function PATCH(request: NextRequest) {
       );
     }
     if (input.searchLearning !== undefined) {
+      // TODO(#7): Enable only after learning data, reset, and OFF semantics
+      // affect the real retrieval path rather than the settings row alone.
       return errorResponse(
         409,
         "SEARCH_LEARNING_NOT_AVAILABLE",
