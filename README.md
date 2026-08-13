@@ -162,6 +162,7 @@ Hybrid Retrieval / Recall
 
 - [Implementation Handoff](./IMPLEMENTATION_PROMPT.md)
 - [Database Design](./DATABASE_DESIGN.md)
+- [Parallel Development Workflow Options](./WORKFLOW_OPTIONS.md)
 - [Design / Architecture Images](./docs/images/README.md)
 
 ---
@@ -392,6 +393,7 @@ AI に「このデータへアクセスする権限があるか」を判断さ�
 ├── README.md
 ├── IMPLEMENTATION_PROMPT.md
 ├── DATABASE_DESIGN.md
+├── WORKFLOW_OPTIONS.md
 └── docs/
     └── images/
         ├── README.md
@@ -410,6 +412,7 @@ AI に「このデータへアクセスする権限があるか」を判断さ�
 
 - Product / implementation requirements → [`IMPLEMENTATION_PROMPT.md`](./IMPLEMENTATION_PROMPT.md)
 - Database / RLS / Storage → [`DATABASE_DESIGN.md`](./DATABASE_DESIGN.md)
+- Parallel development proposal → [`WORKFLOW_OPTIONS.md`](./WORKFLOW_OPTIONS.md)
 - UI / Architecture reference → [`docs/images/`](./docs/images/)
 
 画像と仕様が矛盾する場合、**実装仕様とデータ設計を優先**してください。
