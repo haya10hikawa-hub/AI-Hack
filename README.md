@@ -34,6 +34,42 @@ Media
 
 ---
 
+## Run Locally
+
+必要なものは Node.js 20.9+、pnpm 11、Supabase project、OpenAI-compatible な
+OrcaRouter endpoint です。
+
+```bash
+pnpm install
+cp .env.example .env.local
+pnpm dev
+```
+
+別のターミナルで Supabase migration を適用します。local Supabase CLI を使う場合は
+Docker が必要です。
+
+```bash
+pnpm dlx supabase start
+pnpm dlx supabase db reset
+```
+
+hosted project へ反映する場合は先に `supabase link` で対象 project を明示してから
+`pnpm dlx supabase db push` を実行してください。`.env.local` には少なくとも
+Supabase URL/publishable key、`APP_ORIGIN`、AI endpoint/key/model IDs を設定します。
+AI を未設定の環境では、架空データへフォールバックせず、復旧可能な設定エラーを表示します。
+
+品質ゲート:
+
+```bash
+pnpm verify
+pnpm test:e2e
+```
+
+主要コマンドと必要な環境変数は [`package.json`](./package.json) と
+[`.env.example`](./.env.example) を参照してください。
+
+---
+
 ## Problem
 
 スマートフォンには大量の写真が残っていますが、時間が経つと次の情報は失われていきます。
@@ -364,24 +400,21 @@ AI に「このデータへアクセスする権限があるか」を判断さ�
 
 ---
 
-## Planned Tech Stack
+## Implemented Tech Stack
 
-> 既存コードが存在する場合は、正常な部分を優先して再利用します。
-
-| Layer | Planned |
-|---|---|
-| Frontend | Next.js App Router |
-| Language | TypeScript |
-| Styling | Tailwind CSS + Semantic Design Tokens |
-| Backend | Next.js Server-side APIs |
-| Database | Supabase PostgreSQL |
-| Auth | Supabase Auth |
-| Storage | Supabase Private Storage |
-| AI Gateway | OrcaRouter-compatible API |
-| Validation | Zod |
-| Unit Test | Vitest |
-| E2E | Playwright |
-| Hosting | Vercel |
+| Layer      | Implementation                                            |
+| ---------- | --------------------------------------------------------- |
+| Frontend   | Next.js 16 App Router + React 19                          |
+| Language   | strict TypeScript 5                                       |
+| Styling    | Semantic CSS tokens / responsive editorial UI             |
+| Backend    | Next.js Route Handlers / server-only services             |
+| Database   | Supabase PostgreSQL migration + RLS + transactional RPCs  |
+| Auth       | Supabase Auth cookie session                              |
+| Storage    | Supabase private Storage + short-lived signed derivatives |
+| AI Gateway | Typed OrcaRouter-compatible adapter with Zod output gates |
+| Validation | Zod + magic-byte/decode/image-dimension checks            |
+| Test       | Vitest + Playwright + pgTAP policy/invariant tests        |
+| Hosting    | Vercel configuration + GitHub Actions CI                  |
 
 ---
 
@@ -450,11 +483,18 @@ Hero Flow が壊れた状態で Optional Feature へ進まないでください�
 
 ## Current Status
 
-現在は **Product / UX / Architecture / Database Design を固め、実装へ移行する段階**です。
+現在は **AI HACK 2026 MVP の実装済み baseline** です。
 
-UI 画像は完成形の方向性を示す design reference であり、画像内のデータがそのまま実装済みであることを意味しません。
+- Auth、private workspace、画像 upload、EXIF正規化、sequence clustering
+- metadata-stripped derivative、server-only AI解析、Evidence/Claim provenance
+- Context Completeness / Memory Gap / atomic user correction
+- structured retrieval、AI rerank、Grounded Answer、ambiguity/unknown gate
+- Memory Thread、詳細、確認、検索、Privacy & AI、完全削除UX
+- RLS/private Storage、rate/cost gate、same-origin checks、CSP/security headers
+- unit/integration/E2E、responsive/error/empty/partial-state validation、CI
 
-主要フローは fake / mock ではなく、実データと実 AI Pipeline で成立させることを目標とします。
+production data path に demo/fake backend はありません。E2Eだけが許可された外部境界 fixture を使います。
+UI 画像は引き続き design reference で、実際の画面はユーザー自身のデータまたは正直な空状態を表示します。
 
 ---
 
