@@ -1,0 +1,7 @@
+.next
+node_modules
+AI-Hack
+playwright-report
+test-results
+coverage
+pnpm-lock.yaml

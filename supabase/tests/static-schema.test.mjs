@@ -1,0 +1,94 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const migration = readFileSync(
+  new URL("../migrations/202608130001_initial_rememory.sql", import.meta.url),
+  "utf8",
+);
+
+const privateTables = [
+  "profiles",
+  "user_preferences",
+  "media_assets",
+  "media_sequences",
+  "sequence_assets",
+  "events",
+  "evidence",
+  "memories",
+  "ai_runs",
+  "claims",
+  "user_corrections",
+  "claim_evidence",
+  "memory_context_dimensions",
+  "memory_gaps",
+  "memory_relations",
+  "personal_context",
+  "ai_rate_limits",
+  "ai_daily_budgets",
+  "ai_cost_reservations",
+];
+
+for (const table of privateTables) {
+  assert.match(
+    migration,
+    new RegExp(`alter table public\\.${table} enable row level security;`),
+    `${table} must enable RLS`,
+  );
+}
+
+for (const forbidden of [
+  "exact_lat",
+  "exact_lng",
+  "raw_exif",
+  "original_filename",
+]) {
+  assert.doesNotMatch(
+    migration
+      .replaceAll("exact_lat", "documented_exact_lat")
+      .replaceAll("exact_lng", "documented_exact_lng"),
+    new RegExp(`\\b${forbidden}\\s+(?:numeric|double|text|jsonb)`, "i"),
+    `${forbidden} must not be a persisted column`,
+  );
+}
+
+assert.match(
+  migration,
+  /origin <> 'ai' or confirmation_status <> 'user_confirmed'/,
+);
+assert.match(
+  migration,
+  /active AI\/deterministic claim requires valid supporting evidence/,
+);
+assert.match(migration, /create policy rememory_storage_select_own/);
+assert.doesNotMatch(
+  migration,
+  /create policy rememory_storage_(?:insert|update|delete)_own/,
+);
+assert.match(migration, /values \(\s*'rememory-private',[\s\S]*?false,/);
+assert.match(
+  migration,
+  /create or replace function public\.apply_memory_gap_correction/,
+);
+assert.match(migration, /target_claim_id uuid/);
+assert.match(migration, /candidate_value_json jsonb/);
+assert.match(
+  migration,
+  /revoke all on all tables in schema public from anon, authenticated/,
+);
+assert.doesNotMatch(migration, /grant\s+[^;]*delete\s+on\s+public\.memories/i);
+assert.doesNotMatch(
+  migration,
+  /grant\s+[^;]*(?:insert|delete)\s+on\s+public\.(?:evidence|claims|ai_runs)/i,
+);
+assert.match(
+  migration,
+  /grant execute on function public\.create_evidence_backed_claim\([^)]+\) to service_role/,
+);
+assert.doesNotMatch(
+  migration,
+  /grant execute on function public\.(?:create_evidence_backed_claim|apply_user_correction|apply_memory_gap_correction)[^;]+to authenticated/,
+);
+
+console.log(
+  `Static schema checks passed (${privateTables.length} RLS tables).`,
+);

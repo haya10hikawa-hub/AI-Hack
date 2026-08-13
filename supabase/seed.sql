@@ -1,0 +1,3 @@
+-- Re:Memory intentionally ships no personal-memory seed data.
+-- Use test-local users and fixtures in supabase/tests instead; never present
+-- generated evidence, claims, or corrections as a real user's history.

@@ -1,0 +1,15 @@
+/node_modules/
+/.next/
+/playwright-report/
+/test-results/
+/coverage/
+/.env
+/.env.*
+!/.env.example
+*.log
+*.tsbuildinfo
+.DS_Store
+
+# An accidental nested clone already exists locally. Keep the outer repository
+# as the only implementation root and never stage the duplicate checkout.
+/AI-Hack/
