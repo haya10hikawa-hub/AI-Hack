@@ -77,6 +77,7 @@ Memoryがprocessing中の場合はpartialとして返し、UIは「見つから�
 - [#9 アカウント復旧・データ書き出し・アカウント削除](https://github.com/haya10hikawa-hub/AI-Hack/issues/9)
 - [#10 format:checkを全リポジトリで通してCIへ追加](https://github.com/haya10hikawa-hub/AI-Hack/issues/10)
 - [#11 Phase 1の未決定プロダクト仕様](https://github.com/haya10hikawa-hub/AI-Hack/issues/11)
+- [#13 GitHub ActionsのNode.js 20非推奨警告を解消](https://github.com/haya10hikawa-hub/AI-Hack/issues/13)
 
 ## 変更時に守る不変条件
 
