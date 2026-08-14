@@ -31,6 +31,8 @@ const privateTables = [
   "sequence_analysis_jobs",
   "search_feedback",
   "coarse_location_labels",
+  "memory_map_cells",
+  "memory_map_cell_memories",
 ];
 
 for (const table of privateTables) {
@@ -68,6 +70,21 @@ assert.match(migration, /create policy rememory_storage_select_own/);
 assert.doesNotMatch(
   migration,
   /create policy rememory_storage_(?:insert|update|delete)_own/,
+);
+assert.match(migration, /create table public\.memory_map_cells/);
+assert.match(migration, /cell_id text not null/);
+assert.doesNotMatch(
+  migration.match(/create table public\.memory_map_cells[\s\S]*?\n\);/)?.[0] ??
+    "",
+  /\b(?:latitude|longitude)\s+(?:numeric|double|text)/i,
+);
+assert.match(
+  migration,
+  /revoke all on function public\.reveal_memory_map_cell\(uuid,text\)[\s\S]*?to service_role/,
+);
+assert.doesNotMatch(
+  migration,
+  /grant execute on function public\.reveal_memory_map_cell[^;]+to authenticated/,
 );
 assert.match(
   migration,

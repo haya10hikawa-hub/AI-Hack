@@ -139,3 +139,11 @@ states without fabricated user content.
 
 Automatic camera-roll sync, video analysis, push infrastructure, social/sharing,
 face recognition, graph/vector databases, payments, and native applications.
+
+## 2026-08-14 continuation: Memory Exploration Map Phase 1
+
+- Map を5つ目の主ナビとして追加し、Fog / Outline / Revealed / Memory の状態を持つ H3 resolution 10 の抽象セル表示を実装する。
+- 現在地は明示操作時だけブラウザで取得し、即座に H3 セルへ変換する。サーバー、DB、ログ、AIにはセル ID だけを渡す。
+- 正当なセル関連がある Memory だけをセルに接続する。従来の粗い場所ラベルは推測でセル化せず、別の地域一覧として扱う。
+- RLS、service-only Reveal、同一セルの冪等性、状態の単調遷移、Memory・アカウント削除への追従を migration と pgTAP で固定する。
+- Phase 2 の通知は実装せず、Opportunity candidate / radius の型とプライバシー境界だけを残す。

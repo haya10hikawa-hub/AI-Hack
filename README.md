@@ -132,6 +132,8 @@ AI 推定より、ユーザー本人の確認・訂正を優先します。
 
 写真・位置情報・個人情報を必要以上に外部 AI Provider へ送らない設計を採用します。
 
+Memory Map は現在地をブラウザ内で H3 セルへ即時変換し、正確な緯度・経度を保存・送信しません。外部地図タイルも使用しません。詳細は [Memory Exploration Map privacy contract](./docs/MEMORY_MAP_PRIVACY.md) を参照してください。
+
 ---
 
 ## Signature UX — Memory Thread
@@ -218,6 +220,7 @@ Hybrid Retrieval / Recall
 
 - [Implementation Handoff](./IMPLEMENTATION_PROMPT.md)
 - [Database Design](./DATABASE_DESIGN.md)
+- [Parallel Development Workflow Options](./WORKFLOW_OPTIONS.md)
 - [Design / Architecture Images](./docs/images/README.md)
 
 ---
@@ -448,6 +451,7 @@ AI に「このデータへアクセスする権限があるか」を判断さ�
 ├── README.md
 ├── IMPLEMENTATION_PROMPT.md
 ├── DATABASE_DESIGN.md
+├── WORKFLOW_OPTIONS.md
 └── docs/
     └── images/
         ├── README.md
@@ -466,6 +470,7 @@ AI に「このデータへアクセスする権限があるか」を判断さ�
 
 - Product / implementation requirements → [`IMPLEMENTATION_PROMPT.md`](./IMPLEMENTATION_PROMPT.md)
 - Database / RLS / Storage → [`DATABASE_DESIGN.md`](./DATABASE_DESIGN.md)
+- Parallel development proposal → [`WORKFLOW_OPTIONS.md`](./WORKFLOW_OPTIONS.md)
 - UI / Architecture reference → [`docs/images/`](./docs/images/)
 - 本番接続・監視・障害対応 → [`docs/PRODUCTION_RUNBOOK.md`](./docs/PRODUCTION_RUNBOOK.md)
 - 完成範囲・検証結果・外部接続残件 → [`docs/PRODUCT_COMPLETION_REPORT.md`](./docs/PRODUCT_COMPLETION_REPORT.md)
