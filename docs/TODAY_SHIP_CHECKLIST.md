@@ -71,7 +71,7 @@ pnpm dlx supabase@latest db push
 pnpm dlx supabase@latest test db
 ```
 
-Expected result: all migrations through `202608140004` are applied and pgTAP
+Expected result: all migrations through `202608140006` are applied and pgTAP
 passes.
 
 ### 3. Vercel production deploy
