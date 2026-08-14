@@ -106,12 +106,18 @@ export function SearchScreen() {
     null,
   );
   const [savingFeedback, setSavingFeedback] = useState(false);
+  const [mapCellId, setMapCellId] = useState<string | null>(null);
   const online = useConnectivity();
 
   useEffect(() => {
-    const prefilled = new URLSearchParams(window.location.search).get("q");
+    const parameters = new URLSearchParams(window.location.search);
+    const prefilled = parameters.get("q");
+    const cellId = parameters.get("cellId");
     if (prefilled) {
       queueMicrotask(() => setQuery(prefilled.slice(0, 500)));
+    }
+    if (cellId) {
+      queueMicrotask(() => setMapCellId(cellId.slice(0, 32)));
     }
   }, []);
 
@@ -142,6 +148,7 @@ export function SearchScreen() {
           timezone:
             Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tokyo",
           currentDate: new Date().toLocaleDateString("sv-SE"),
+          ...(mapCellId ? { cellId: mapCellId } : {}),
         }),
       });
       setResult({
@@ -223,6 +230,12 @@ export function SearchScreen() {
             </button>
           </div>
         </form>
+
+        {mapCellId ? (
+          <p className="map-search-context" role="status">
+            Memory Mapで選んだ地域のMemoryを優先して探します。
+          </p>
+        ) : null}
 
         {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
         {submitting ? (
