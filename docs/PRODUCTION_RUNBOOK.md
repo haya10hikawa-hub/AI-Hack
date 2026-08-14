@@ -85,6 +85,24 @@ Use a new account and real photos. Do not reuse Playwright mock data.
 Record first-Event and terminal-analysis timing. The target is first Event in
 20 seconds and complete reconstruction in 35 seconds under the chosen provider.
 
+The repeatable browser smoke command performs the same core path and prints the
+timings as JSON. It deletes the created Memory in `finally`, but still use a
+dedicated account and non-sensitive approved photos:
+
+```bash
+LIVE_BASE_URL=https://YOUR_ORIGIN \
+LIVE_HERO_EMAIL=hero-test@example.com \
+LIVE_HERO_PASSWORD='test-password' \
+LIVE_PHOTO_DIR=/absolute/path/to/approved-photos \
+LIVE_COARSE_PLACE=神山 \
+pnpm test:live:hero
+```
+
+To verify checkpoint recovery, stop the deployment process after the job has
+advanced to `claims` or `gap`, wait for the five-minute lease to expire, invoke
+the worker, and confirm the job resumes at that recorded stage. The resumed run
+must not add another Vision `ai_runs` record for a `claims`/`gap` checkpoint.
+
 ## 7. Incident triage
 
 - `health.database=false`: verify Supabase URL/secret and migration status.

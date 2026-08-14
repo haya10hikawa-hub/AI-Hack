@@ -10,6 +10,10 @@ const sql = readdirSync(migrationDirectory)
   .sort()
   .map((name) => readFileSync(`${migrationDirectory}/${name}`, "utf8"))
   .join("\n");
+const checkpointMigration = readFileSync(
+  `${migrationDirectory}/202608140004_analysis_job_checkpoints.sql`,
+  "utf8",
+);
 
 const privateTables = [
   "profiles",
@@ -100,6 +104,21 @@ describe("baseline migration security contract", () => {
     );
     expect(sql).not.toMatch(
       /grant execute on function public\.(?:enqueue|claim|touch|finish)_sequence_analysis_job[^;]+to authenticated/iu,
+    );
+  });
+
+  it("preserves the earliest unfinished AI stage across retry and reclaim", () => {
+    expect(checkpointMigration).toMatch(
+      /when analysis_job\.stage in \('claims','gap'\) then analysis_job\.stage[\s\S]*else 'analysis'/iu,
+    );
+    expect(checkpointMigration).toMatch(
+      /elsif v_job\.attempt_count < v_job\.max_attempts then[\s\S]*set status = 'retry_wait',[\s\S]*available_at/iu,
+    );
+    expect(checkpointMigration).not.toMatch(
+      /set status = 'retry_wait',\s*stage = 'queued'/iu,
+    );
+    expect(checkpointMigration).toMatch(
+      /when sequence_analysis_jobs\.stage in \('analysis','claims','gap'\)[\s\S]*then sequence_analysis_jobs\.stage/iu,
     );
   });
 

@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ImagePlus, Search } from "lucide-react";
+import {
+  ArrowRight,
+  ImagePlus,
+  LoaderCircle,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 
 import { AppShell } from "./app-shell";
-import { apiRequest } from "./api-client";
+import { apiRequest, jsonBody } from "./api-client";
 import { MemoryThread } from "./memory-thread";
 import { InlineNotice, StateView } from "./state-view";
 import type { MemoryThreadItem, MemoryThreadPayload } from "./types";
@@ -28,10 +34,48 @@ export function HomeScreen() {
   );
   const reload = resource.reload;
   const data = normalizeThread(resource.data);
+  const [retrying, setRetrying] = useState(false);
+  const [retryNotice, setRetryNotice] = useState<{
+    tone: "sage" | "error";
+    text: string;
+  } | null>(null);
   const isProcessing =
     data?.memories.some(
       ({ processingState }) => processingState === "processing",
     ) ?? false;
+  const hasFailed =
+    data?.memories.some(
+      ({ processingState }) => processingState === "failed",
+    ) ?? false;
+
+  const retryFailedAnalysis = async () => {
+    setRetrying(true);
+    setRetryNotice(null);
+    try {
+      const result = await apiRequest<{ retryRequested: number }>(
+        "/api/analysis/retry",
+        { method: "POST", ...jsonBody({}) },
+      );
+      setRetryNotice({
+        tone: "sage",
+        text:
+          result.retryRequested > 0
+            ? "AI再構成を再開しました。進行状況は自動で更新されます。"
+            : "再試行できる解析はありませんでした。現在の状態を更新します。",
+      });
+      reload();
+    } catch (caught) {
+      setRetryNotice({
+        tone: "error",
+        text:
+          caught instanceof Error
+            ? caught.message
+            : "AI再構成を再開できませんでした。",
+      });
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   useEffect(() => {
     if (!isProcessing) return;
@@ -89,6 +133,34 @@ export function HomeScreen() {
           <InlineNotice tone="coral">
             {data.partialMessage ||
               "保存済みのMemoryを表示しています。一部のAI再構成はまだ完了していません。"}
+          </InlineNotice>
+        ) : null}
+
+        {hasFailed ? (
+          <div className="analysis-retry-action">
+            <div>
+              <strong>写真を再アップロードする必要はありません</strong>
+              <p>保存済みの派生画像と途中結果から、安全に再開できます。</p>
+            </div>
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={retrying}
+              onClick={() => void retryFailedAnalysis()}
+            >
+              {retrying ? (
+                <LoaderCircle className="spin" aria-hidden="true" size={18} />
+              ) : (
+                <RefreshCw aria-hidden="true" size={18} />
+              )}
+              {retrying ? "再開しています…" : "AI再構成を再試行"}
+            </button>
+          </div>
+        ) : null}
+
+        {retryNotice ? (
+          <InlineNotice tone={retryNotice.tone}>
+            {retryNotice.text}
           </InlineNotice>
         ) : null}
 

@@ -2,7 +2,7 @@
 
 Date: 2026-08-14
 
-Branch: `codex/product-completion`
+Branch: `codex/final-product-completion`
 
 ## Outcome
 
@@ -28,13 +28,17 @@ credentials. Those credentials are intentionally not committed.
 - Node 24-compatible GitHub Actions and mandatory formatting gate
 - Stable single-worker mobile/desktop Playwright execution
 - Product decisions and production operations runbooks
+- Durable `analysis → claims → gap` checkpoints that survive retry/lease reclaim
+- Explicit Home/Memory Detail retry without re-uploading saved photos
+- Credential-gated live Hero browser smoke with JSON performance output
+- Re:Memory app icon and a clean browser-console visual pass
 
 ## Verification evidence
 
-- `pnpm verify`: format, ESLint, strict TypeScript, 84 Vitest tests, production build
-- `pnpm test:e2e`: 14/14 mobile and desktop Playwright cases
-- `supabase db reset`: all three migrations applied from a clean database
-- `supabase test db`: 74 pgTAP assertions passed
+- `pnpm verify`: format, ESLint, strict TypeScript, 91 Vitest tests, production build
+- `pnpm test:e2e`: 16/16 mobile and desktop Playwright cases
+- `supabase db reset`: all four migrations applied from a clean database
+- `supabase test db`: 78 pgTAP assertions passed
 - Live local Supabase test without API mocks:
   - sign-up and cookie session succeeded
   - privacy/search-learning setting persisted
@@ -52,8 +56,8 @@ real hosted AI provider's latency or availability.
 1. Configure a hosted Supabase project and apply migrations.
 2. Configure a real OrcaRouter-compatible provider and model IDs.
 3. Deploy to Vercel, set `APP_ORIGIN` and `CRON_SECRET`, and verify `/api/health`.
-4. Run the live 10-photo Hero Flow and record the 20-second first-Event and
-   35-second terminal-analysis targets.
+4. Run `pnpm test:live:hero` with the live 10-photo set and record the 20-second
+   first-Event and 35-second terminal-analysis targets.
 5. Kill the process during a real multi-sequence AI run and confirm the durable
    worker resumes it without duplicate Evidence, Claims, or gaps.
 6. Optionally configure `GEOCODER_API_BASE_URL`; manual coarse-place input remains
@@ -73,6 +77,6 @@ These are deployment/credential checks, not missing fallback code. See
 
 - #5, #7, #9, #10, #11, #13: implemented by the product-completion change
 - #3, #6: keep open until real hosted credentials and deployment are available
-- #4: durable implementation complete; keep open only for the real-provider
-  forced-process-exit acceptance test
+- #4: durable queue, checkpoints, and user retry implementation complete; keep
+  open only for the real-provider forced-process-exit acceptance test
 - #8: keep as a post-MVP calendar connector roadmap item

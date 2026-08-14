@@ -283,7 +283,7 @@ export async function getMemoryThread(client: Client, userId: string) {
     partialMessage: items.some(
       ({ processingState }) => processingState === "failed",
     )
-      ? "写真と確定的な情報は保存済みです。AI再構成に失敗したMemoryは、同じ写真をもう一度追加すると再試行できます。"
+      ? "写真と確定的な情報は保存済みです。失敗したAI再構成は、保存済みの途中結果から再試行できます。"
       : items.some(({ processingState }) => processingState === "processing")
         ? "写真は保存済みです。AIによる再構成を続けています。"
         : null,
@@ -421,7 +421,7 @@ export async function getMemoryDetail(
       item.processingState === "processing"
         ? "決定的なEvidenceは保存済みですが、AI再構成はまだ完了していません。"
         : item.processingState === "failed"
-          ? "決定的なEvidenceは保存済みです。同じ写真をもう一度追加するとAI再構成を再試行できます。"
+          ? "決定的なEvidenceは保存済みです。AI再構成は保存済みの途中結果から再試行できます。"
           : null,
   };
 }

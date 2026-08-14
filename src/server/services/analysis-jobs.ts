@@ -25,6 +25,7 @@ interface ClaimedJob {
   sequenceId: string;
   memoryId: string;
   attemptCount: number;
+  stage: AnalysisPipelineStage;
 }
 
 export interface AnalysisJobRunSummary {
@@ -110,12 +111,22 @@ async function claimNextJob(
   ) {
     throw new Error("Sequence analysis job claim was invalid.");
   }
+  const checkpoint = await database
+    .from("sequence_analysis_jobs")
+    .select("stage")
+    .eq("id", row.job_id)
+    .eq("user_id", row.user_id)
+    .single();
+  if (checkpoint.error !== null || !isPipelineStage(checkpoint.data.stage)) {
+    throw new Error("Sequence analysis job checkpoint was invalid.");
+  }
   return {
     jobId: row.job_id,
     userId: row.user_id,
     sequenceId: row.sequence_id,
     memoryId: row.memory_id,
     attemptCount: row.attempt_count,
+    stage: checkpoint.data.stage,
   };
 }
 
@@ -126,10 +137,10 @@ async function processClaimedJob(input: {
   job: ClaimedJob;
 }): Promise<"complete" | "retry_wait" | "dead"> {
   try {
-    const representativeAssets = await loadRepresentativeAssets(
-      input.database,
-      input.job,
-    );
+    const representativeAssets =
+      input.job.stage === "analysis"
+        ? await loadRepresentativeAssets(input.database, input.job)
+        : [];
     await analyzePersistedSequence({
       userId: input.job.userId,
       requestId: input.requestId,
@@ -137,6 +148,7 @@ async function processClaimedJob(input: {
       memoryId: input.job.memoryId,
       representativeAssets,
       database: input.database,
+      resumeFrom: input.job.stage,
       onStage: async (stage) => {
         await touchJob(input.database, input.job.jobId, input.workerId, stage);
       },
@@ -162,6 +174,10 @@ async function processClaimedJob(input: {
       retryDelaySeconds: retryDelaySeconds(input.job.attemptCount),
     });
   }
+}
+
+function isPipelineStage(value: unknown): value is AnalysisPipelineStage {
+  return value === "analysis" || value === "claims" || value === "gap";
 }
 
 async function loadRepresentativeAssets(
