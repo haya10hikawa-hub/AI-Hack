@@ -16,21 +16,28 @@ export async function GET() {
     process.env.AI_MODEL_EVENT_STRONG,
   ].every((value) => typeof value === "string" && value.length > 0);
   let databaseReady = false;
+  let storageReady = false;
   try {
-    const result = await createSupabaseAdminClient()
+    const supabase = createSupabaseAdminClient();
+    const result = await supabase
       .from("profiles")
       .select("id", { head: true, count: "exact" });
     databaseReady = result.error === null;
+    const bucket = await supabase.storage.getBucket("rememory-private");
+    storageReady = bucket.error === null && bucket.data.public === false;
   } catch {
     databaseReady = false;
+    storageReady = false;
   }
-  const ready = publicConfigReady && databaseReady && aiConfigReady;
+  const ready =
+    publicConfigReady && databaseReady && storageReady && aiConfigReady;
   return NextResponse.json(
     {
       status: ready ? "ready" : "degraded",
       checks: {
         publicConfig: publicConfigReady,
         database: databaseReady,
+        storage: storageReady,
         aiConfiguration: aiConfigReady,
       },
       checkedAt: new Date().toISOString(),
