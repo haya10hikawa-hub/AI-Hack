@@ -12,12 +12,12 @@
 
 ## 推奨体制
 
-| 担当 | 主な責務 | ブランチ例 |
-|---|---|---|
-| Codex 1 | 統合リーダー、初期構築、共通型、Supabase接続、PRレビュー、最終統合 | `codex/foundation` |
-| Codex 2 | DB migration、RLS、Storage、Upload、EXIF、Temporal Sequence | `codex/backend-ingestion` |
-| Codex 3 | Memory Thread、Memory Detail、Confirmation、Search UI、Responsive UI | `codex/frontend-ui` |
-| Claude | AI Adapter、Memory Gap、Retrieval、Grounded Answer、テスト・Securityレビュー | `claude/ai-review` |
+| 担当    | 主な責務                                                                     | ブランチ例                |
+| ------- | ---------------------------------------------------------------------------- | ------------------------- |
+| Codex 1 | 統合リーダー、初期構築、共通型、Supabase接続、PRレビュー、最終統合           | `codex/foundation`        |
+| Codex 2 | DB migration、RLS、Storage、Upload、EXIF、Temporal Sequence                  | `codex/backend-ingestion` |
+| Codex 3 | Memory Thread、Memory Detail、Confirmation、Search UI、Responsive UI         | `codex/frontend-ui`       |
+| Claude  | AI Adapter、Memory Gap、Retrieval、Grounded Answer、テスト・Securityレビュー | `claude/ai-review`        |
 
 ClaudeをAI領域ではなくQA専任にする案もあります。実装速度を優先する場合はAI Adapterを担当し、安全性を優先する場合は横断レビューを担当します。
 
@@ -122,11 +122,11 @@ Upload
 
 並行化しても、4台だから単純に4分の1にはなりません。Foundation、レビュー、外部サービス設定、競合解消、統合テストが直列工程として残ります。
 
-| 完成レベル | 単独作業の目安 | 4台並行の目安 |
-|---|---:|---:|
-| ハッカソン提出可能MVP | 18〜30時間 | 10〜18時間 |
-| 仕様を広く満たす実用MVP | 40〜65時間 | 24〜40時間 |
-| Security・テスト・仕上げ込み | 65〜100時間 | 38〜65時間 |
+| 完成レベル                   | 単独作業の目安 | 4台並行の目安 |
+| ---------------------------- | -------------: | ------------: |
+| ハッカソン提出可能MVP        |     18〜30時間 |    10〜18時間 |
+| 仕様を広く満たす実用MVP      |     40〜65時間 |    24〜40時間 |
+| Security・テスト・仕上げ込み |    65〜100時間 |    38〜65時間 |
 
 この時間は、Supabase、AI Gateway、Vercelのアカウントと環境変数が利用可能で、Product Open Questionsによる長時間の停止がない場合の概算です。
 
