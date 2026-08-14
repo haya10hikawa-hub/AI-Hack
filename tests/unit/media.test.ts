@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { coarsenCoordinates, normalizeExifDateTime } from "@/src/domain/exif";
+import {
+  coarsenCoordinates,
+  coarseLocationCenter,
+  normalizeExifDateTime,
+} from "@/src/domain/exif";
 import {
   detectImageMime,
   sha256Hex,
@@ -93,5 +97,14 @@ describe("privacy-safe EXIF normalization", () => {
     expect(coarse.key).not.toContain("35.0116");
     expect(coarse.key).not.toContain("134.0234");
     expect(coarse.precisionKm).toBeGreaterThan(5);
+  });
+
+  it("decodes only the center of a coarse grid for locality lookup", () => {
+    const coarse = coarsenCoordinates(35.0116, 134.0234, 0.1);
+    const center = coarseLocationCenter(coarse);
+    expect(center).not.toBeNull();
+    expect(Math.abs(center!.latitude - 35.0116)).toBeLessThanOrEqual(0.05);
+    expect(Math.abs(center!.longitude - 134.0234)).toBeLessThanOrEqual(0.05);
+    expect(center).not.toEqual({ latitude: 35.0116, longitude: 134.0234 });
   });
 });

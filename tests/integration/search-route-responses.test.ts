@@ -92,6 +92,7 @@ const SearchResponseSchema = z
     clarification: z.string().nullable(),
     partial: z.boolean().optional(),
     partialMessage: z.string().nullable().optional(),
+    feedbackEnabled: z.boolean().optional(),
   })
   .strict();
 

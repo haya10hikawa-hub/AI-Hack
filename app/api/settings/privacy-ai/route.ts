@@ -77,14 +77,6 @@ export async function PATCH(request: NextRequest) {
         id,
       );
     }
-    if (input.searchLearning !== undefined) {
-      return errorResponse(
-        409,
-        "SEARCH_LEARNING_NOT_AVAILABLE",
-        "検索学習は現在準備中です。",
-        id,
-      );
-    }
     const { user, supabase } = await requireAuthenticatedUser();
     const patch = {
       ...(input.usePhotos === undefined ? {} : { use_photos: input.usePhotos }),
@@ -100,6 +92,9 @@ export async function PATCH(request: NextRequest) {
       ...(input.usePersonalContext === undefined
         ? {}
         : { use_personal_context: input.usePersonalContext }),
+      ...(input.searchLearning === undefined
+        ? {}
+        : { search_learning_enabled: input.searchLearning }),
       updated_at: new Date().toISOString(),
     };
     const { data, error } = await supabase
@@ -109,6 +104,14 @@ export async function PATCH(request: NextRequest) {
       .select(selectedColumns)
       .single();
     if (error !== null) throw new RepositoryError("update_preferences");
+    if (input.searchLearning === false) {
+      const removed = await createSupabaseAdminClient()
+        .from("search_feedback")
+        .delete()
+        .eq("user_id", user.id);
+      if (removed.error !== null)
+        throw new RepositoryError("clear_search_feedback");
+    }
     return dataResponse(toPayload(data));
   } catch (error) {
     return routeError(error, id);

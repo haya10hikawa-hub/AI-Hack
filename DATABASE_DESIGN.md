@@ -510,9 +510,9 @@ create table public.memory_gaps (
 
 ```json
 [
-  {"label":"FTCの練習","value":"ftc_practice"},
-  {"label":"授業","value":"class"},
-  {"label":"その他","value":"other"}
+  { "label": "FTCの練習", "value": "ftc_practice" },
+  { "label": "授業", "value": "class" },
+  { "label": "その他", "value": "other" }
 ]
 ```
 
@@ -904,7 +904,7 @@ interface ParsedMemoryQuery {
   aliasesApplied?: Array<{
     from: string;
     to: string;
-    source: 'user_confirmed' | 'session';
+    source: "user_confirmed" | "session";
   }>;
 }
 ```

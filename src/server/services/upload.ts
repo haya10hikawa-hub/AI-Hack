@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 
-import { extractNormalizedExif } from "@/src/domain/exif";
+import { extractNormalizedExif, type CoarseLocation } from "@/src/domain/exif";
 import { assessMemoryImportance } from "@/src/domain/memory-assessment";
 import {
   sha256Hex,
@@ -75,6 +75,7 @@ export async function ingestUpload(input: {
   config: RuntimeConfig;
   timezoneOffsetMinutes: number | null;
   coarsePlace?: string | null;
+  resolveCoarseLocation?: (location: CoarseLocation) => Promise<string | null>;
 }): Promise<IngestionResult> {
   const { client, userId, config } = input;
   const preferenceResult = await client
@@ -102,6 +103,7 @@ export async function ingestUpload(input: {
         preferences,
         timezoneOffsetMinutes: input.timezoneOffsetMinutes,
         coarsePlace: input.coarsePlace ?? null,
+        resolveCoarseLocation: input.resolveCoarseLocation,
       });
       stored.push(result);
     } catch (error) {
@@ -278,6 +280,7 @@ async function validateAndStoreAsset(input: {
   };
   timezoneOffsetMinutes: number | null;
   coarsePlace: string | null;
+  resolveCoarseLocation?: (location: CoarseLocation) => Promise<string | null>;
 }): Promise<StoredAsset> {
   if (input.file.size > input.config.upload.maxBytesPerFile) {
     throw new UploadValidationError("ファイルサイズが上限を超えています。");
@@ -407,8 +410,16 @@ async function validateAndStoreAsset(input: {
   const capturedAt = input.preferences.useCapturedAt
     ? resolvedCapturedAt
     : null;
+  const resolvedCoarseLabel =
+    input.coarsePlace === null &&
+    input.preferences.useLocation &&
+    exif.coarseLocation !== null &&
+    input.resolveCoarseLocation !== undefined
+      ? await input.resolveCoarseLocation(exif.coarseLocation)
+      : null;
   const coarsePlace =
     input.coarsePlace ??
+    resolvedCoarseLabel ??
     (input.preferences.useLocation && exif.coarseLocation !== null
       ? exif.coarseLocation.key
       : null);

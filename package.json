@@ -21,7 +21,7 @@
     "test:e2e:update": "playwright test --update-snapshots",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",

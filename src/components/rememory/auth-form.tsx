@@ -30,6 +30,7 @@ export function AuthForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(initialNotice);
   const [success, setSuccess] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
   const signUp = mode === "sign-up";
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -64,6 +65,27 @@ export function AuthForm({
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const resendConfirmation = async () => {
+    if (!email) return;
+    setResending(true);
+    setError(null);
+    try {
+      const result = await apiRequest<{ message: string }>(
+        "/api/auth/resend-confirmation",
+        { method: "POST", ...jsonBody({ email }) },
+      );
+      setSuccess(result.message);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "確認メールを再送できませんでした。",
+      );
+    } finally {
+      setResending(false);
     }
   };
 
@@ -168,7 +190,19 @@ export function AuthForm({
             ) : null}
             {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
             {success ? (
-              <InlineNotice tone="sage">{success}</InlineNotice>
+              <InlineNotice tone="sage">
+                {success}
+                {signUp ? (
+                  <button
+                    className="text-button notice-action"
+                    type="button"
+                    disabled={resending}
+                    onClick={() => void resendConfirmation()}
+                  >
+                    {resending ? "再送しています…" : "確認メールを再送"}
+                  </button>
+                ) : null}
+              </InlineNotice>
             ) : null}
             <button
               className="button button--primary button--full"
@@ -194,6 +228,11 @@ export function AuthForm({
               {signUp ? "ログイン" : "アカウントを作成"}
             </Link>
           </p>
+          {!signUp ? (
+            <p className="auth-switch auth-switch--secondary">
+              <Link href="/auth/reset-password">パスワードを忘れた場合</Link>
+            </p>
+          ) : null}
           <Link className="back-link auth-back" href="/">
             Re:Memoryについて見る
           </Link>

@@ -32,7 +32,10 @@ export async function GET(request: NextRequest) {
     succeeded = verified.error === null;
   }
 
-  const destination = new URL(succeeded ? "/home" : "/auth/login", url);
+  const requestedNext = url.searchParams.get("next");
+  const safeNext =
+    requestedNext === "/auth/update-password" ? requestedNext : "/home";
+  const destination = new URL(succeeded ? safeNext : "/auth/login", url);
   if (!succeeded) destination.searchParams.set("confirmation", "failed");
   return NextResponse.redirect(destination);
 }

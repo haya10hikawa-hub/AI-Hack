@@ -13,6 +13,7 @@ import {
   processAnalysisJobs,
 } from "@/src/server/services/analysis-jobs";
 import { ingestUpload } from "@/src/server/services/upload";
+import { resolveCoarseLocationLabel } from "@/src/server/services/reverse-geocode";
 import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
@@ -64,6 +65,8 @@ export async function POST(request: NextRequest) {
       config,
       timezoneOffsetMinutes,
       coarsePlace,
+      resolveCoarseLocation: (location) =>
+        resolveCoarseLocationLabel({ database, location }),
     });
 
     // Persist jobs before responding. `after` only reduces initial latency;

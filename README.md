@@ -378,9 +378,12 @@ AI に「このデータへアクセスする権限があるか」を判断さ�
 - Query Interpretation
 - Candidate Selection
 - Grounded Answer
+- Opt-in explicit search learning
 - Memory Thread UI
 - Memory Detail
 - Privacy & AI Settings
+- Password recovery / email confirmation resend
+- Account data export / complete account deletion
 - Loading / Empty / Error states
 - Smartphone-first responsive UI
 
@@ -446,6 +449,9 @@ AI に「このデータへアクセスする権限があるか」を判断さ�
 - Product / implementation requirements → [`IMPLEMENTATION_PROMPT.md`](./IMPLEMENTATION_PROMPT.md)
 - Database / RLS / Storage → [`DATABASE_DESIGN.md`](./DATABASE_DESIGN.md)
 - UI / Architecture reference → [`docs/images/`](./docs/images/)
+- 本番接続・監視・障害対応 → [`docs/PRODUCTION_RUNBOOK.md`](./docs/PRODUCTION_RUNBOOK.md)
+- 完成範囲・検証結果・外部接続残件 → [`docs/PRODUCT_COMPLETION_REPORT.md`](./docs/PRODUCT_COMPLETION_REPORT.md)
+- Delete / People / Confirm / Search learning の決定 → [`docs/PRODUCT_DECISIONS.md`](./docs/PRODUCT_DECISIONS.md)
 
 画像と仕様が矛盾する場合、**実装仕様とデータ設計を優先**してください。
 
@@ -471,15 +477,12 @@ Hero Flow が壊れた状態で Optional Feature へ進まないでください�
 
 ---
 
-## Open Product Questions
+## Product Decisions
 
-以下はまだ最終決定していません。
-
-- Delete / Forget UX をどこまでユーザーへ見せるか
-- Phase 1 で People / Relationship をどの程度 Memory Gap の優先項目にするか
-- Confirm を恒常的な Bottom Navigation に置くか、Home Entry Point に統合するか
-
-独断で Product の中心仕様へ変更せず、チームで判断してください。
+Delete / Forget はsoft hideではなく復元不能な完全削除、People / Relationshipは
+core flow後のopt-in enrichment、ConfirmはBottom Navigationへ常設せずHomeから入る方針です。
+検索学習は明示的なフィードバックだけを使い、設定をオフにすると履歴を削除します。
+判断理由は [`docs/PRODUCT_DECISIONS.md`](./docs/PRODUCT_DECISIONS.md) に固定しています。
 
 ---
 
@@ -489,12 +492,14 @@ Hero Flow が壊れた状態で Optional Feature へ進まないでください�
 
 - Auth、private workspace、画像 upload、EXIF正規化、sequence clustering
 - metadata-stripped derivative、server-only AI解析、Evidence/Claim provenance
+- exact GPSを保持しないcoarse-gridと、設定可能な粗い地名の自動解決
 - durable sequence analysis job、lease、段階heartbeat、自動retry、Cron/user resume
 - Context Completeness / Memory Gap / atomic user correction
 - structured retrieval、AI rerank、Grounded Answer、ambiguity/unknown gate
-- Memory Thread、詳細、確認、検索、Privacy & AI、完全削除UX
+- Memory Thread、詳細、確認、検索、opt-in検索学習、Privacy & AI
+- メール確認再送、パスワード再設定、JSONデータ出力、アカウント完全削除
 - RLS/private Storage、rate/cost gate、same-origin checks、CSP/security headers
-- unit/integration/E2E、responsive/error/empty/partial-state validation、CI
+- health endpoint、production runbook、unit/integration/E2E、CI format gate
 
 production data path に demo/fake backend はありません。E2Eだけが許可された外部境界 fixture を使います。
 UI 画像は引き続き design reference で、実際の画面はユーザー自身のデータまたは正直な空状態を表示します。

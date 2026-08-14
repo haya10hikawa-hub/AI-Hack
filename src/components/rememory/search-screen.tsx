@@ -8,6 +8,8 @@ import {
   Image as ImageIcon,
   LoaderCircle,
   Search,
+  ThumbsDown,
+  ThumbsUp,
 } from "lucide-react";
 
 import { apiRequest, jsonBody } from "./api-client";
@@ -100,6 +102,10 @@ export function SearchScreen() {
   const [result, setResult] = useState<SearchPayload | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<"helpful" | "not_helpful" | null>(
+    null,
+  );
+  const [savingFeedback, setSavingFeedback] = useState(false);
   const online = useConnectivity();
 
   const search = async (event: FormEvent<HTMLFormElement>) => {
@@ -119,6 +125,7 @@ export function SearchScreen() {
     setSubmitting(true);
     setError(null);
     setResult(null);
+    setFeedback(null);
     setSubmittedQuery(trimmed);
     try {
       const payload = await apiRequest<SearchPayload>("/api/search", {
@@ -143,6 +150,28 @@ export function SearchScreen() {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const saveFeedback = async (outcome: "helpful" | "not_helpful") => {
+    const memoryId = result?.candidates[0]?.memory.id;
+    if (!memoryId || !submittedQuery) return;
+    setSavingFeedback(true);
+    setError(null);
+    try {
+      await apiRequest("/api/search/feedback", {
+        method: "POST",
+        ...jsonBody({ query: submittedQuery, memoryId, outcome }),
+      });
+      setFeedback(outcome);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "検索フィードバックを保存できませんでした。",
+      );
+    } finally {
+      setSavingFeedback(false);
     }
   };
 
@@ -255,6 +284,46 @@ export function SearchScreen() {
                       ))}
                     </ul>
                   </details>
+                ) : null}
+                {result.feedbackEnabled && result.candidates[0] ? (
+                  <div
+                    className="search-feedback"
+                    aria-label="検索結果へのフィードバック"
+                  >
+                    <span>
+                      {feedback
+                        ? "フィードバックを保存しました。"
+                        : "この結果は役に立ちましたか？"}
+                    </span>
+                    <button
+                      className={
+                        feedback === "helpful"
+                          ? "button button--secondary is-selected"
+                          : "button button--secondary"
+                      }
+                      type="button"
+                      disabled={savingFeedback}
+                      aria-pressed={feedback === "helpful"}
+                      onClick={() => void saveFeedback("helpful")}
+                    >
+                      <ThumbsUp aria-hidden="true" size={17} />
+                      役に立った
+                    </button>
+                    <button
+                      className={
+                        feedback === "not_helpful"
+                          ? "button button--secondary is-selected"
+                          : "button button--secondary"
+                      }
+                      type="button"
+                      disabled={savingFeedback}
+                      aria-pressed={feedback === "not_helpful"}
+                      onClick={() => void saveFeedback("not_helpful")}
+                    >
+                      <ThumbsDown aria-hidden="true" size={17} />
+                      違った
+                    </button>
+                  </div>
                 ) : null}
               </section>
             ) : result.answerState === "clarification" ||
