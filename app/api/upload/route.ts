@@ -61,7 +61,10 @@ export async function POST(request: NextRequest) {
     const result = await ingestUpload({
       client: database,
       userId: user.id,
-      files,
+      files: files.map((file) => ({
+        name: file.name,
+        load: async () => file,
+      })),
       config,
       timezoneOffsetMinutes,
       coarsePlace,
@@ -81,6 +84,7 @@ export async function POST(request: NextRequest) {
         processAnalysisJobs({
           database,
           requestId: id,
+          userId: user.id,
           maxJobs: 1,
         }).catch(() => undefined),
       );

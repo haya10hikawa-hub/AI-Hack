@@ -11,7 +11,10 @@ import {
   type AnalysisRepresentativeAsset,
 } from "@/src/server/services/analysis-pipeline";
 
-const JOB_LEASE_SECONDS = 300;
+// One worker invocation handles a single AI stage. Keep the lease just above
+// the platform's 60 second route limit so a killed worker can be reclaimed
+// promptly instead of leaving the UI in a five-minute processing loop.
+const JOB_LEASE_SECONDS = 75;
 
 interface SequenceJobInput {
   sequenceId: string;
@@ -31,6 +34,7 @@ interface ClaimedJob {
 export interface AnalysisJobRunSummary {
   claimed: number;
   completed: number;
+  progressed: number;
   retryScheduled: number;
   dead: number;
 }
@@ -65,6 +69,7 @@ export async function processAnalysisJobs(input: {
   const summary: AnalysisJobRunSummary = {
     claimed: 0,
     completed: 0,
+    progressed: 0,
     retryScheduled: 0,
     dead: 0,
   };
@@ -81,6 +86,7 @@ export async function processAnalysisJobs(input: {
       job,
     });
     if (outcome === "complete") summary.completed += 1;
+    if (outcome === "progressed") summary.progressed += 1;
     if (outcome === "retry_wait") summary.retryScheduled += 1;
     if (outcome === "dead") summary.dead += 1;
   }
@@ -135,13 +141,13 @@ async function processClaimedJob(input: {
   requestId: string;
   workerId: string;
   job: ClaimedJob;
-}): Promise<"complete" | "retry_wait" | "dead"> {
+}): Promise<"complete" | "progressed" | "retry_wait" | "dead"> {
   try {
     const representativeAssets =
       input.job.stage === "analysis"
         ? await loadRepresentativeAssets(input.database, input.job)
         : [];
-    await analyzePersistedSequence({
+    const progress = await analyzePersistedSequence({
       userId: input.job.userId,
       requestId: input.requestId,
       sequenceId: input.job.sequenceId,
@@ -149,10 +155,19 @@ async function processClaimedJob(input: {
       representativeAssets,
       database: input.database,
       resumeFrom: input.job.stage,
-      onStage: async (stage) => {
-        await touchJob(input.database, input.job.jobId, input.workerId, stage);
-      },
+      stopAfterStage: true,
     });
+    if (!progress.complete) {
+      if (progress.nextStage === null || progress.nextStage === "analysis") {
+        throw new Error("Sequence analysis checkpoint was invalid.");
+      }
+      await advanceJob(input.database, {
+        jobId: input.job.jobId,
+        workerId: input.workerId,
+        nextStage: progress.nextStage,
+      });
+      return "progressed";
+    }
     return await finishJob(input.database, {
       jobId: input.job.jobId,
       workerId: input.workerId,
@@ -237,20 +252,21 @@ async function loadRepresentativeAssets(
   return result;
 }
 
-async function touchJob(
+async function advanceJob(
   database: SupabaseClient,
-  jobId: string,
-  workerId: string,
-  stage: AnalysisPipelineStage,
+  input: {
+    jobId: string;
+    workerId: string;
+    nextStage: Exclude<AnalysisPipelineStage, "analysis">;
+  },
 ) {
-  const result = await database.rpc("touch_sequence_analysis_job", {
-    p_job_id: jobId,
-    p_worker_id: workerId,
-    p_stage: stage,
-    p_lease_seconds: JOB_LEASE_SECONDS,
+  const result = await database.rpc("advance_sequence_analysis_job", {
+    p_job_id: input.jobId,
+    p_worker_id: input.workerId,
+    p_next_stage: input.nextStage,
   });
   if (result.error !== null || result.data !== true) {
-    throw new Error("Sequence analysis job heartbeat failed.");
+    throw new Error("Sequence analysis job checkpoint handoff failed.");
   }
 }
 

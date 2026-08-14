@@ -36,6 +36,11 @@ export default defineConfig({
   webServer: {
     command: "pnpm dev --hostname 127.0.0.1 --port 3100",
     url: "http://127.0.0.1:3100",
+    env: {
+      NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:3100/playwright-supabase",
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+        "sb_publishable_playwright_test_only",
+    },
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

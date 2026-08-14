@@ -34,6 +34,7 @@ interface StoredAsset {
   derivative: Buffer;
   derivativeWidth: number;
   derivativeHeight: number;
+  originalStorageKey: string;
   derivativeStorageKey: string | null;
   analysisStatus:
     | "pending"
@@ -43,16 +44,19 @@ interface StoredAsset {
     | "not_supported";
   updatedAt: string | null;
   isDuplicate: boolean;
+  uploadSlotId: string | null;
 }
 
 interface RejectedAsset {
   name: string;
   reason: string;
+  slotId?: string;
 }
 
 export interface IngestionResult {
   accepted: Array<{
     id: string;
+    slotId?: string;
     name: string;
     capturedAt: string | null;
     state: "uploaded" | "processing" | "partial" | "ready";
@@ -66,12 +70,21 @@ export interface IngestionResult {
     memoryId: string;
     representativeAssets: StoredAsset[];
   }>;
+  retainedOriginalStorageKeys: string[];
+}
+
+export interface IngestionFile {
+  name: string;
+  load: () => Promise<File>;
+  stagedOriginalKey?: string;
+  reservedAssetId?: string;
+  uploadSlotId?: string;
 }
 
 export async function ingestUpload(input: {
   client: Client;
   userId: string;
-  files: File[];
+  files: IngestionFile[];
   config: RuntimeConfig;
   timezoneOffsetMinutes: number | null;
   coarsePlace?: string | null;
@@ -93,12 +106,16 @@ export async function ingestUpload(input: {
 
   const stored: StoredAsset[] = [];
   const rejected: RejectedAsset[] = [];
-  for (const file of input.files.slice(0, config.upload.maxFiles)) {
+  for (const source of input.files.slice(0, config.upload.maxFiles)) {
     try {
+      const file = await source.load();
       const result = await validateAndStoreAsset({
         client,
         userId,
         file,
+        stagedOriginalKey: source.stagedOriginalKey ?? null,
+        reservedAssetId: source.reservedAssetId ?? null,
+        uploadSlotId: source.uploadSlotId ?? null,
         config,
         preferences,
         timezoneOffsetMinutes: input.timezoneOffsetMinutes,
@@ -108,7 +125,10 @@ export async function ingestUpload(input: {
       stored.push(result);
     } catch (error) {
       rejected.push({
-        name: file.name,
+        name: source.name,
+        ...(source.uploadSlotId === undefined
+          ? {}
+          : { slotId: source.uploadSlotId }),
         reason:
           error instanceof UploadValidationError
             ? error.publicMessage
@@ -117,9 +137,9 @@ export async function ingestUpload(input: {
     }
   }
   if (input.files.length > config.upload.maxFiles) {
-    input.files.slice(config.upload.maxFiles).forEach((file) => {
+    input.files.slice(config.upload.maxFiles).forEach(({ name }) => {
       rejected.push({
-        name: file.name,
+        name,
         reason: `一度に追加できる写真は${config.upload.maxFiles}枚までです。`,
       });
     });
@@ -224,6 +244,7 @@ export async function ingestUpload(input: {
 
   const accepted = stored.map((asset) => ({
     id: asset.id,
+    ...(asset.uploadSlotId === null ? {} : { slotId: asset.uploadSlotId }),
     name: asset.name,
     capturedAt: asset.capturedAt,
     state: retryAssetIds.has(asset.id)
@@ -258,6 +279,9 @@ export async function ingestUpload(input: {
             ? "安全に受け付けられる写真がありませんでした。"
             : "写真と確定的なEvidenceを保存しました。",
     sequences: persistedSequences,
+    retainedOriginalStorageKeys: uniqueStored
+      .filter(({ isDuplicate }) => !isDuplicate)
+      .map(({ originalStorageKey }) => originalStorageKey),
   };
 }
 
@@ -272,6 +296,9 @@ async function validateAndStoreAsset(input: {
   client: Client;
   userId: string;
   file: File;
+  stagedOriginalKey: string | null;
+  reservedAssetId: string | null;
+  uploadSlotId: string | null;
   config: RuntimeConfig;
   preferences: {
     usePhotos: boolean;
@@ -344,7 +371,7 @@ async function validateAndStoreAsset(input: {
   const duplicate = await input.client
     .from("media_assets")
     .select(
-      "id,mime_type,captured_at,timezone_offset,coarse_place,sha256,width,height,derivative_storage_key,analysis_status,updated_at",
+      "id,mime_type,captured_at,timezone_offset,coarse_place,sha256,width,height,storage_key,derivative_storage_key,analysis_status,updated_at",
     )
     .eq("user_id", input.userId)
     .eq("sha256", sha256)
@@ -365,10 +392,12 @@ async function validateAndStoreAsset(input: {
       derivative,
       derivativeWidth: derivativeMetadata.width,
       derivativeHeight: derivativeMetadata.height,
+      originalStorageKey: duplicate.data.storage_key,
       derivativeStorageKey: duplicate.data.derivative_storage_key,
       analysisStatus: duplicate.data.analysis_status,
       updatedAt: duplicate.data.updated_at,
       isDuplicate: true,
+      uploadSlotId: input.uploadSlotId,
     };
   }
 
@@ -386,24 +415,33 @@ async function validateAndStoreAsset(input: {
     (exif.capturedAtLocal !== null && input.timezoneOffsetMinutes !== null
       ? `${exif.capturedAtLocal}${offsetText(input.timezoneOffsetMinutes)}`
       : null);
-  const assetId = crypto.randomUUID();
+  const assetId = input.reservedAssetId ?? crypto.randomUUID();
   const originalKey = `${input.userId}/assets/${assetId}/original`;
   const derivativeKey = `${input.userId}/assets/${assetId}/vision.webp`;
   const bucket = input.client.storage.from("rememory-private");
-  const originalUpload = await bucket.upload(originalKey, bytes, {
-    contentType: validation.mimeType,
-    upsert: false,
-    cacheControl: "private, max-age=0, no-store",
-  });
-  if (originalUpload.error !== null)
-    throw new RepositoryError("store_original");
+  if (input.stagedOriginalKey === null) {
+    const originalUpload = await bucket.upload(originalKey, bytes, {
+      contentType: validation.mimeType,
+      upsert: false,
+      cacheControl: "0",
+    });
+    if (originalUpload.error !== null)
+      throw new RepositoryError("store_original");
+  } else if (input.stagedOriginalKey !== originalKey) {
+    throw new RepositoryError("invalid_staged_original_path");
+  }
   const derivativeUpload = await bucket.upload(derivativeKey, derivative, {
     contentType: "image/webp",
-    upsert: false,
-    cacheControl: "private, max-age=0, no-store",
+    upsert: input.stagedOriginalKey !== null,
+    cacheControl: "0",
   });
   if (derivativeUpload.error !== null) {
-    await bucket.remove([originalKey]);
+    // A staged original can be shared by a concurrent completion retry. Do
+    // not delete it on an uncertain derivative failure; a later retry can
+    // safely recreate the derivative at the reserved path.
+    if (input.stagedOriginalKey === null) {
+      await bucket.remove([originalKey]);
+    }
     throw new RepositoryError("store_derivative");
   }
 
@@ -446,8 +484,48 @@ async function validateAndStoreAsset(input: {
     analysis_status: input.preferences.usePhotos ? "pending" : "not_supported",
   });
   if (insert.error !== null) {
-    await bucket.remove([originalKey, derivativeKey]);
-    throw new RepositoryError("persist_asset");
+    const raced = await input.client
+      .from("media_assets")
+      .select(
+        "id,mime_type,captured_at,timezone_offset,coarse_place,sha256,width,height,storage_key,derivative_storage_key,analysis_status,updated_at",
+      )
+      .eq("user_id", input.userId)
+      .eq("sha256", sha256)
+      .maybeSingle();
+    if (raced.error !== null || raced.data === null) {
+      // For the legacy multipart path these objects belong only to this
+      // invocation. Staged objects may concurrently be used by another
+      // completion request, so leave them retryable instead of risking a
+      // dangling database row.
+      if (input.stagedOriginalKey === null) {
+        await bucket.remove([originalKey, derivativeKey]);
+      }
+      throw new RepositoryError("persist_asset");
+    }
+    if (raced.data.id !== assetId) {
+      await bucket.remove([originalKey, derivativeKey]);
+    }
+    return {
+      id: raced.data.id,
+      name: input.file.name,
+      mimeType: validation.mimeType,
+      capturedAt: raced.data.captured_at,
+      capturedAtLocal: raced.data.captured_at?.slice(0, 23) ?? null,
+      timezoneOffset: raced.data.timezone_offset,
+      coarsePlace: raced.data.coarse_place,
+      sha256,
+      width: raced.data.width ?? decoded.width,
+      height: raced.data.height ?? decoded.height,
+      derivative,
+      derivativeWidth: derivativeMetadata.width,
+      derivativeHeight: derivativeMetadata.height,
+      originalStorageKey: raced.data.storage_key,
+      derivativeStorageKey: raced.data.derivative_storage_key,
+      analysisStatus: raced.data.analysis_status,
+      updatedAt: raced.data.updated_at,
+      isDuplicate: true,
+      uploadSlotId: input.uploadSlotId,
+    };
   }
 
   return {
@@ -471,10 +549,12 @@ async function validateAndStoreAsset(input: {
     derivative,
     derivativeWidth: derivativeMetadata.width,
     derivativeHeight: derivativeMetadata.height,
+    originalStorageKey: originalKey,
     derivativeStorageKey: derivativeKey,
     analysisStatus: input.preferences.usePhotos ? "pending" : "not_supported",
     updatedAt: null,
     isDuplicate: false,
+    uploadSlotId: input.uploadSlotId,
   };
 }
 
@@ -784,7 +864,7 @@ async function loadRetrySequences(input: {
         : await input.client
             .from("media_assets")
             .select(
-              "id,mime_type,captured_at,timezone_offset,coarse_place,sha256,width,height,derivative_storage_key,analysis_status,updated_at",
+              "id,mime_type,captured_at,timezone_offset,coarse_place,sha256,width,height,storage_key,derivative_storage_key,analysis_status,updated_at",
             )
             .eq("user_id", input.userId)
             .in("id", representativeIds);
@@ -828,10 +908,12 @@ async function loadRetrySequences(input: {
         derivative,
         derivativeWidth: metadata.width,
         derivativeHeight: metadata.height,
+        originalStorageKey: row.storage_key,
         derivativeStorageKey: row.derivative_storage_key,
         analysisStatus: row.analysis_status,
         updatedAt: row.updated_at,
         isDuplicate: true,
+        uploadSlotId: null,
       });
     }
     if (representativeAssets.length > 0) {

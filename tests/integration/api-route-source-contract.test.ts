@@ -75,13 +75,13 @@ describe("API route implementation contracts", () => {
     expect(upload).toMatch(/processingState:\s*result\.processingState/u);
   });
 
-  it("claims, heartbeats, and finishes durable jobs through server-only RPCs", () => {
+  it("claims, advances, and finishes durable jobs through server-only RPCs", () => {
     const claim = analysisJobs.indexOf(
       'database.rpc("claim_sequence_analysis_job"',
     );
     const analysis = analysisJobs.indexOf("await analyzePersistedSequence(");
-    const heartbeat = analysisJobs.indexOf(
-      'database.rpc("touch_sequence_analysis_job"',
+    const advance = analysisJobs.indexOf(
+      'database.rpc("advance_sequence_analysis_job"',
     );
     const finish = analysisJobs.indexOf(
       'database.rpc("finish_sequence_analysis_job"',
@@ -89,13 +89,15 @@ describe("API route implementation contracts", () => {
 
     expect(claim).toBeGreaterThan(-1);
     expect(analysis).toBeGreaterThan(claim);
-    expect(heartbeat).toBeGreaterThan(analysis);
-    expect(finish).toBeGreaterThan(heartbeat);
+    expect(advance).toBeGreaterThan(analysis);
+    expect(finish).toBeGreaterThan(advance);
     expect(analysisJobs).toMatch(
       /retryDelaySeconds\(input\.job\.attemptCount\)/u,
     );
     expect(analysisJobs).toMatch(/download\(asset\.derivative_storage_key\)/u);
     expect(analysisJobs).toMatch(/resumeFrom:\s*input\.job\.stage/u);
+    expect(analysisJobs).toMatch(/stopAfterStage:\s*true/u);
+    expect(analysisJobs).toMatch(/const JOB_LEASE_SECONDS = 75/u);
     expect(analysisPipeline).toMatch(
       /if \(resumeFrom === "analysis"\)[\s\S]*?provider\.analyzeSequence/u,
     );

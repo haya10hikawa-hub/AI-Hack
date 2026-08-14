@@ -115,12 +115,14 @@ export interface SearchPayload {
 
 export interface UploadAcceptedItem {
   id: string;
+  slotId?: string;
   name?: string;
   capturedAt?: string | null;
   state?: ProcessingState;
 }
 
 export interface UploadRejectedItem {
+  slotId?: string;
   name: string;
   reason: string;
 }

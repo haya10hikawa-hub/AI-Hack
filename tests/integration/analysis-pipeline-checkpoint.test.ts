@@ -180,4 +180,39 @@ describe("analysis pipeline checkpoints", () => {
     expect(analyzeSequence).toHaveBeenCalledOnce();
     expect(generateEventClaims).toHaveBeenCalledOnce();
   });
+
+  it("hands a completed Vision stage back before claim generation", async () => {
+    const progress = await analyzePersistedSequence({
+      userId: "user-1",
+      requestId: "request-1",
+      sequenceId: "sequence-1",
+      memoryId: "memory-1",
+      representativeAssets: [representative],
+      database: database() as never,
+      resumeFrom: "analysis",
+      stopAfterStage: true,
+    });
+
+    expect(progress).toEqual({ complete: false, nextStage: "claims" });
+    expect(analyzeSequence).toHaveBeenCalledOnce();
+    expect(generateEventClaims).not.toHaveBeenCalled();
+  });
+
+  it("hands a completed claims stage back before gap detection", async () => {
+    const progress = await analyzePersistedSequence({
+      userId: "user-1",
+      requestId: "request-1",
+      sequenceId: "sequence-1",
+      memoryId: "memory-1",
+      representativeAssets: [],
+      database: database() as never,
+      resumeFrom: "claims",
+      stopAfterStage: true,
+    });
+
+    expect(progress).toEqual({ complete: false, nextStage: "gap" });
+    expect(analyzeSequence).not.toHaveBeenCalled();
+    expect(generateEventClaims).toHaveBeenCalledOnce();
+    expect(detectMemoryGap).not.toHaveBeenCalled();
+  });
 });

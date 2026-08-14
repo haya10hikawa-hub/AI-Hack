@@ -102,10 +102,16 @@ describe("baseline migration security contract", () => {
       /create or replace function public\.finish_sequence_analysis_job/iu,
     );
     expect(sql).toMatch(
+      /create or replace function public\.advance_sequence_analysis_job/iu,
+    );
+    expect(sql).toMatch(
       /grant execute on function public\.claim_sequence_analysis_job\([^)]+\)\s+to service_role/iu,
     );
     expect(sql).not.toMatch(
       /grant execute on function public\.(?:enqueue|claim|touch|finish)_sequence_analysis_job[^;]+to authenticated/iu,
+    );
+    expect(sql).toMatch(
+      /grant execute on function public\.advance_sequence_analysis_job\([^)]+\)\s+to service_role/iu,
     );
   });
 

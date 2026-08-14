@@ -25,8 +25,53 @@ function json(route: Route, data: unknown, status = 200) {
   });
 }
 
-async function installHeroApi(page: Page) {
+interface HeroApiObservations {
+  preparedFiles: Array<{
+    name: string;
+    mimeType: string;
+    bytes: number;
+  }>;
+  signedUploads: Array<{ path: string; token: string; method: string }>;
+  completion: {
+    manifest: string;
+    timezoneOffsetMinutes: number;
+    timezone: string;
+    coarsePlace: string | null;
+  } | null;
+}
+
+async function installHeroApi(page: Page): Promise<HeroApiObservations> {
   let confirmed = false;
+  const observations: HeroApiObservations = {
+    preparedFiles: [],
+    signedUploads: [],
+    completion: null,
+  };
+
+  await page.route(
+    /\/storage\/v1\/object\/upload\/sign\/rememory-private\//u,
+    async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const marker = "/storage/v1/object/upload/sign/rememory-private/";
+      const encodedPath = url.pathname.slice(
+        url.pathname.indexOf(marker) + marker.length,
+      );
+      observations.signedUploads.push({
+        path: decodeURIComponent(encodedPath),
+        token: url.searchParams.get("token") ?? "",
+        method: request.method(),
+      });
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          Key: `rememory-private/${decodeURIComponent(encodedPath)}`,
+        }),
+      });
+    },
+  );
+
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -39,10 +84,31 @@ async function installHeroApi(page: Page) {
         },
       });
     }
-    if (url.pathname === "/api/upload" && request.method() === "POST") {
+    if (url.pathname === "/api/upload/prepare" && request.method() === "POST") {
+      const input = request.postDataJSON() as {
+        files: HeroApiObservations["preparedFiles"];
+      };
+      observations.preparedFiles = input.files;
+      return json(route, {
+        manifest: "hero-upload-manifest",
+        uploads: input.files.map((_, index) => ({
+          clientIndex: index,
+          slotId: `slot-${index + 1}`,
+          path: `preview-user/staging/hero-upload/slot-${index + 1}`,
+          token: `signed-token-${index + 1}`,
+        })),
+      });
+    }
+    if (
+      url.pathname === "/api/upload/complete" &&
+      request.method() === "POST"
+    ) {
+      observations.completion =
+        request.postDataJSON() as HeroApiObservations["completion"];
       return json(route, {
         accepted: Array.from({ length: 10 }, (_, index) => ({
           id: `asset-${index + 1}`,
+          slotId: `slot-${index + 1}`,
           name: `photo-${index + 1}.png`,
           capturedAt: "2026-04-12T09:00:00+09:00",
           state: "processing",
@@ -183,6 +249,7 @@ async function installHeroApi(page: Page) {
       }),
     });
   });
+  return observations;
 }
 
 test("10 photos become a clarifiable, corrected and grounded memory", async ({
@@ -193,7 +260,7 @@ test("10 photos become a clarifiable, corrected and grounded memory", async ({
     if (message.type() === "error") consoleErrors.push(message.text());
   });
   page.on("pageerror", (error) => consoleErrors.push(error.message));
-  await installHeroApi(page);
+  const observations = await installHeroApi(page);
 
   await page.goto("/add");
   const png = Buffer.from(
@@ -208,8 +275,38 @@ test("10 photos become a clarifiable, corrected and grounded memory", async ({
     })),
   );
   await expect(page.getByText("選択中の写真")).toBeVisible();
+  await page.getByLabel("おおまかな場所（任意）").fill("神山");
   await page.getByRole("button", { name: "写真を安全に追加" }).click();
   await expect(page.getByText("受付 10件")).toBeVisible();
+  await expect(page.getByText("選択中の写真")).toHaveCount(0);
+
+  expect(observations.preparedFiles).toEqual(
+    Array.from({ length: 10 }, (_, index) => ({
+      name: `photo-${index + 1}.png`,
+      mimeType: "image/png",
+      bytes: png.length,
+    })),
+  );
+  expect(observations.signedUploads).toHaveLength(10);
+  expect(
+    observations.signedUploads
+      .map(({ path, token, method }) => ({ path, token, method }))
+      .sort((left, right) => left.path.localeCompare(right.path)),
+  ).toEqual(
+    Array.from({ length: 10 }, (_, index) => ({
+      path: `preview-user/staging/hero-upload/slot-${index + 1}`,
+      token: `signed-token-${index + 1}`,
+      method: "PUT",
+    })).sort((left, right) => left.path.localeCompare(right.path)),
+  );
+  expect(observations.completion).toMatchObject({
+    manifest: "hero-upload-manifest",
+    coarsePlace: "神山",
+  });
+  expect(observations.completion?.timezoneOffsetMinutes).toEqual(
+    expect.any(Number),
+  );
+  expect(observations.completion?.timezone).toEqual(expect.any(String));
 
   await page.goto("/home");
   await expect(
@@ -252,9 +349,97 @@ test("10 photos become a clarifiable, corrected and grounded memory", async ({
   expect(consoleErrors).toEqual([]);
 });
 
+test("processing refresh keeps the Memory list and expansion state visible", async ({
+  page,
+}) => {
+  let analysisRequests = 0;
+  let backgroundRefreshRequests = 0;
+  let releaseRefresh: (() => void) | undefined;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname === "/api/memories" && request.method() === "GET") {
+      const processing = analysisRequests === 0;
+      if (!processing) {
+        backgroundRefreshRequests += 1;
+        await refreshGate;
+      }
+      return json(route, {
+        memories: [
+          {
+            ...memory,
+            processingState: processing ? "processing" : "ready",
+          },
+        ],
+        pendingConfirmationCount: 0,
+        partial: processing,
+        partialMessage: processing
+          ? "写真は保存済みです。AIによる再構成を続けています。"
+          : null,
+      });
+    }
+    if (
+      url.pathname === "/api/analysis/process" &&
+      request.method() === "POST"
+    ) {
+      analysisRequests += 1;
+      return json(route, {
+        claimed: 1,
+        completed: 1,
+        retryScheduled: 0,
+        dead: 0,
+      });
+    }
+    return route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: { code: "TEST_ROUTE_MISSING", message: url.pathname },
+      }),
+    });
+  });
+
+  await page.goto("/home");
+  const memoryToggle = page.getByRole("button", {
+    name: new RegExp(memory.title),
+  });
+  await expect(memoryToggle).toBeVisible();
+  await memoryToggle.click();
+  await expect(memoryToggle).toHaveAttribute("aria-expanded", "false");
+
+  await expect
+    .poll(() => backgroundRefreshRequests, { timeout: 10_000 })
+    .toBeGreaterThan(0);
+  await expect(page.getByText(memory.title)).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Memoryを読み込んでいます" }),
+  ).toHaveCount(0);
+  await expect(memoryToggle).toHaveAttribute("aria-expanded", "false");
+
+  releaseRefresh?.();
+  await expect(page.getByText("写真を保存済み・AI再構成中")).toHaveCount(0);
+  await expect(memoryToggle).toHaveAttribute("aria-expanded", "false");
+});
+
 test("an unconfigured production boundary reports an honest recoverable error", async ({
   page,
 }) => {
+  await page.route("**/api/memories?view=thread", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "CONFIGURATION_ERROR",
+          message: "この環境では保存サービスがまだ設定されていません。",
+        },
+      }),
+    }),
+  );
   await page.goto("/home");
   await expect(
     page.getByRole("heading", { name: "Memoryを読み込めませんでした" }),

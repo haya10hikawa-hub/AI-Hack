@@ -39,6 +39,7 @@ export function HomeScreen() {
     tone: "sage" | "error";
     text: string;
   } | null>(null);
+  const [pollNotice, setPollNotice] = useState<string | null>(null);
   const isProcessing =
     data?.memories.some(
       ({ processingState }) => processingState === "processing",
@@ -79,20 +80,60 @@ export function HomeScreen() {
   };
 
   useEffect(() => {
-    if (!isProcessing) return;
+    if (!isProcessing) {
+      let active = true;
+      void Promise.resolve().then(() => {
+        if (active) setPollNotice(null);
+      });
+      return () => {
+        active = false;
+      };
+    }
     let active = true;
-    const timer = window.setTimeout(() => {
-      void apiRequest("/api/analysis/process", { method: "POST" })
-        .catch(() => undefined)
-        .finally(() => {
-          if (active) reload();
-        });
-    }, 4_000);
+    let timer: number | null = null;
+    let consecutiveFailures = 0;
+
+    const schedule = (delayMs: number) => {
+      if (!active) return;
+      timer = window.setTimeout(() => void poll(), delayMs);
+    };
+    const poll = async () => {
+      if (!active) return;
+      if (document.visibilityState === "hidden") {
+        schedule(15_000);
+        return;
+      }
+      try {
+        const summary = await apiRequest<{
+          claimed: number;
+          completed: number;
+          progressed?: number;
+          retryScheduled: number;
+          dead: number;
+        }>("/api/analysis/process", { method: "POST" });
+        if (!active) return;
+        consecutiveFailures = 0;
+        setPollNotice(null);
+        reload();
+        schedule(summary.claimed > 0 ? 4_000 : 12_000);
+      } catch {
+        if (!active) return;
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= 2) {
+          setPollNotice(
+            "AI再構成の自動更新を一時停止しています。写真は保存済みです。しばらく待つか、再試行してください。",
+          );
+        }
+        schedule(Math.min(30_000, 5_000 * 2 ** consecutiveFailures));
+      }
+    };
+
+    schedule(2_000);
     return () => {
       active = false;
-      window.clearTimeout(timer);
+      if (timer !== null) window.clearTimeout(timer);
     };
-  }, [isProcessing, reload, resource.data]);
+  }, [isProcessing, reload]);
 
   return (
     <AppShell>
@@ -137,6 +178,16 @@ export function HomeScreen() {
           </InlineNotice>
         ) : null}
 
+        {pollNotice ? (
+          <InlineNotice tone="coral">{pollNotice}</InlineNotice>
+        ) : null}
+
+        {data !== null && resource.error && !unauthenticated ? (
+          <InlineNotice tone="coral">
+            最新状態を取得できませんでした。表示中のMemoryはそのまま残しています。
+          </InlineNotice>
+        ) : null}
+
         {hasFailed ? (
           <div className="analysis-retry-action">
             <div>
@@ -165,13 +216,13 @@ export function HomeScreen() {
           </InlineNotice>
         ) : null}
 
-        {resource.loading ? (
+        {resource.loading && data === null ? (
           <StateView
             kind="loading"
             title="Memoryを読み込んでいます"
             description="保存済みの写真と確認状態を安全に取得しています。"
           />
-        ) : resource.error && !unauthenticated ? (
+        ) : resource.error && data === null && !unauthenticated ? (
           <StateView
             kind={resource.error.code === "NETWORK_ERROR" ? "offline" : "error"}
             title="Memoryを読み込めませんでした"

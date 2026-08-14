@@ -13,18 +13,29 @@ import {
 
 import { apiRequest, ApiError } from "./api-client";
 import { AppShell } from "./app-shell";
+import { uploadPhotoToSignedSlot } from "./direct-photo-upload";
 import { InlineNotice } from "./state-view";
 import type { UploadPayload } from "./types";
 import { useConnectivity } from "./use-api-resource";
 
 const supportedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-const maximumFileBytes = 20 * 1024 * 1024;
+const maximumFileBytes = 15 * 1024 * 1024;
 
 interface LocalFile {
   key: string;
   file: File;
   error: string | null;
+}
+
+interface PreparedUpload {
+  manifest: string;
+  uploads: Array<{
+    clientIndex: number;
+    slotId: string;
+    path: string;
+    token: string;
+  }>;
 }
 
 function toLocalFile(file: File): LocalFile {
@@ -37,7 +48,7 @@ function toLocalFile(file: File): LocalFile {
       : file.size <= 0
         ? "空のファイルは追加できません。"
         : file.size > maximumFileBytes
-          ? "1ファイル20MB以下にしてください。"
+          ? "1ファイル15MB以下にしてください。"
           : null,
   };
 }
@@ -49,6 +60,11 @@ export function UploadScreen() {
   const [result, setResult] = useState<UploadPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [coarsePlace, setCoarsePlace] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<{
+    completed: number;
+    total: number;
+    phase: "uploading" | "processing";
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const online = useConnectivity();
 
@@ -89,32 +105,79 @@ export function UploadScreen() {
       return;
     }
 
-    const body = new FormData();
-    validFiles.forEach(({ file }) => body.append("files", file, file.name));
-    body.append(
-      "timezoneOffsetMinutes",
-      String(new Date().getTimezoneOffset()),
-    );
-    body.append(
-      "timezone",
-      Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown",
-    );
-    if (coarsePlace.trim()) body.append("coarsePlace", coarsePlace.trim());
     setSubmitting(true);
+    setUploadProgress({
+      completed: 0,
+      total: validFiles.length,
+      phase: "uploading",
+    });
     setError(null);
     setResult(null);
     try {
-      const payload = await apiRequest<UploadPayload>("/api/upload", {
+      const prepared = await apiRequest<PreparedUpload>("/api/upload/prepare", {
         method: "POST",
-        body,
+        body: JSON.stringify({
+          files: validFiles.map(({ file }) => ({
+            name: file.name,
+            mimeType: file.type,
+            bytes: file.size,
+          })),
+        }),
+      });
+      if (prepared.uploads.length !== validFiles.length) {
+        throw new Error("写真アップロードの準備結果が一致しませんでした。");
+      }
+      const localKeyBySlot = new Map(
+        prepared.uploads.map((slot) => [
+          slot.slotId,
+          validFiles[slot.clientIndex]?.key ?? "",
+        ]),
+      );
+      await runWithConcurrency(prepared.uploads, 3, async (slot) => {
+        const local = validFiles[slot.clientIndex];
+        if (local === undefined) {
+          throw new Error("写真アップロードの対応関係が壊れています。");
+        }
+        try {
+          await uploadPhotoToSignedSlot({
+            path: slot.path,
+            token: slot.token,
+            file: local.file,
+          });
+        } catch {
+          // The completion endpoint verifies every signed slot directly. A
+          // lost browser response can still represent a successful upload, so
+          // let the server make the authoritative accepted/rejected decision.
+        } finally {
+          setUploadProgress((current) =>
+            current === null
+              ? null
+              : {
+                  ...current,
+                  completed: Math.min(current.total, current.completed + 1),
+                },
+          );
+        }
+      });
+      setUploadProgress({
+        completed: validFiles.length,
+        total: validFiles.length,
+        phase: "processing",
+      });
+      const payload = await apiRequest<UploadPayload>("/api/upload/complete", {
+        method: "POST",
+        body: JSON.stringify({
+          manifest: prepared.manifest,
+          timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+          timezone:
+            Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown",
+          coarsePlace: coarsePlace.trim() || null,
+        }),
       });
       setResult(payload);
-      const acceptedNames = new Set(
-        payload.accepted.map((item) => item.name).filter(Boolean),
-      );
-      if (acceptedNames.size > 0) {
+      if (payload.accepted.length > 0) {
         setFiles((current) =>
-          current.filter((item) => !acceptedNames.has(item.file.name)),
+          removeAcceptedFiles(current, payload, localKeyBySlot),
         );
         setCoarsePlace("");
       }
@@ -128,6 +191,7 @@ export function UploadScreen() {
       );
     } finally {
       setSubmitting(false);
+      setUploadProgress(null);
     }
   };
 
@@ -317,10 +381,68 @@ export function UploadScreen() {
             ) : (
               <Check aria-hidden="true" size={19} />
             )}
-            {submitting ? "写真を検証して保存中…" : "写真を安全に追加"}
+            {submitting && uploadProgress?.phase === "uploading"
+              ? `写真を送信中… ${uploadProgress.completed}/${uploadProgress.total}`
+              : submitting
+                ? "写真を検証してMemoryを作成中…"
+                : "写真を安全に追加"}
           </button>
         </form>
       </div>
     </AppShell>
   );
+}
+
+async function runWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  task: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        await task(items[index] as T);
+      }
+    },
+  );
+  await Promise.all(workers);
+}
+
+function removeAcceptedFiles(
+  current: LocalFile[],
+  payload: UploadPayload,
+  localKeyBySlot: Map<string, string>,
+): LocalFile[] {
+  const acceptedKeys = new Set(
+    payload.accepted
+      .map(({ slotId }) =>
+        slotId === undefined ? undefined : localKeyBySlot.get(slotId),
+      )
+      .filter((key): key is string => Boolean(key)),
+  );
+  const counts = new Map<string, number>();
+  payload.accepted.forEach(({ name, slotId }) => {
+    if (!name || (slotId !== undefined && localKeyBySlot.has(slotId))) return;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  });
+  return current.filter((item) => {
+    if (acceptedKeys.has(item.key)) return false;
+    const normalized = normalizeFileName(item.file.name);
+    const remaining = counts.get(normalized) ?? 0;
+    if (remaining <= 0) return true;
+    counts.set(normalized, remaining - 1);
+    return false;
+  });
+}
+
+function normalizeFileName(value: string): string {
+  const normalized = value
+    .normalize("NFKC")
+    .replace(/[\\/\u0000-\u001f\u007f]/gu, "_")
+    .trim();
+  return (normalized || "photo").slice(0, 180);
 }

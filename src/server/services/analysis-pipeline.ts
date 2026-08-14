@@ -24,6 +24,11 @@ export interface AnalysisRepresentativeAsset {
   derivativeHeight: number;
 }
 
+export interface AnalysisPipelineProgress {
+  complete: boolean;
+  nextStage: AnalysisPipelineStage | null;
+}
+
 interface ActiveClaimSnapshot {
   id: string;
   field: string;
@@ -47,7 +52,8 @@ export async function analyzePersistedSequence(input: {
   database: SupabaseClient;
   resumeFrom?: AnalysisPipelineStage;
   onStage?: (stage: AnalysisPipelineStage) => Promise<void>;
-}) {
+  stopAfterStage?: boolean;
+}): Promise<AnalysisPipelineProgress> {
   const provider = createAIProviderFromEnv(
     {
       rateLimitStore: new SupabaseRateLimitStore(input.database, input.userId),
@@ -149,6 +155,9 @@ export async function analyzePersistedSequence(input: {
     }
     summaryCandidate = analysis.data.summaryCandidate;
     await input.onStage?.("claims");
+    if (input.stopAfterStage === true) {
+      return { complete: false, nextStage: "claims" };
+    }
   }
 
   const allEvidenceResult = await input.database
@@ -293,6 +302,9 @@ export async function analyzePersistedSequence(input: {
     };
   });
   await input.onStage?.("gap");
+  if (input.stopAfterStage === true && resumeFrom !== "gap") {
+    return { complete: false, nextStage: "gap" };
+  }
 
   const completeness = assessContextCompleteness(refreshedRows);
   if (
@@ -407,6 +419,8 @@ export async function analyzePersistedSequence(input: {
       }
     }
   }
+
+  return { complete: true, nextStage: null };
 }
 
 function preferredClaimsByField(claims: ActiveClaimSnapshot[]) {
