@@ -44,6 +44,7 @@ export interface PlaceProvider {
 export function createPlaceProviderFromEnv(input?: {
   fetchImplementation?: typeof fetch;
   endpoint?: string;
+  timeoutMs?: number;
 }): PlaceProvider {
   const endpoint = input?.endpoint ?? process.env.PLACE_PROVIDER_API_BASE_URL;
   if (!endpoint) {
@@ -63,6 +64,7 @@ export function createPlaceProviderFromEnv(input?: {
   return new NominatimPlaceProvider(
     baseUrl,
     input?.fetchImplementation ?? fetch,
+    input?.timeoutMs ?? 3500,
   );
 }
 
@@ -70,6 +72,7 @@ class NominatimPlaceProvider implements PlaceProvider {
   constructor(
     private readonly baseUrl: URL,
     private readonly fetchImplementation: typeof fetch,
+    private readonly timeoutMs: number,
   ) {}
 
   async search(query: string): Promise<PlaceCandidate[]> {
@@ -80,7 +83,14 @@ class NominatimPlaceProvider implements PlaceProvider {
     url.searchParams.set("namedetails", "1");
     url.searchParams.set("limit", "8");
     const rows = await this.request(url);
-    return rows.slice(0, 8).map(publicCandidate);
+    const candidates = new Map<string, PlaceCandidate>();
+    for (const row of rows) {
+      const id = providerId(row);
+      if (id === null || candidates.has(id)) continue;
+      candidates.set(id, publicCandidate(row, id));
+      if (candidates.size === 8) break;
+    }
+    return [...candidates.values()];
   }
 
   async resolve(candidateId: string): Promise<SelectedPlace | null> {
@@ -105,7 +115,7 @@ class NominatimPlaceProvider implements PlaceProvider {
     ) {
       return null;
     }
-    const candidate = publicCandidate(row);
+    const candidate = publicCandidate(row, candidateId);
     // Exact coordinates exist only in these local variables. They are reduced
     // to an H3 cell before this trusted object can leave the adapter.
     return SelectedPlaceSchema.parse({
@@ -139,7 +149,7 @@ class NominatimPlaceProvider implements PlaceProvider {
             ? { authorization: `Bearer ${process.env.PLACE_PROVIDER_API_KEY}` }
             : {}),
         },
-        signal: AbortSignal.timeout(3500),
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
       if (!response.ok) {
         throw new PlaceProviderUnavailableError("Place provider failed.");
@@ -154,6 +164,7 @@ class NominatimPlaceProvider implements PlaceProvider {
 
 function publicCandidate(
   row: z.infer<typeof ProviderRowSchema>,
+  id: string,
 ): PlaceCandidate {
   const displayName = cleanText(
     text(row.namedetails?.name) ?? row.name ?? row.display_name?.split(",")[0],
@@ -162,16 +173,17 @@ function publicCandidate(
   const fallback = cleanText(row.display_name, 160);
   const name = displayName ?? fallback ?? "名称未設定の場所";
   return PlaceCandidateSchema.parse({
-    id: providerId(row),
+    id,
     name,
     area: areaLabel(row.address),
     category: cleanText(row.addresstype ?? row.type ?? row.category, 80),
   });
 }
 
-function providerId(row: z.infer<typeof ProviderRowSchema>): string {
+function providerId(row: z.infer<typeof ProviderRowSchema>): string | null {
   const prefix = { node: "N", way: "W", relation: "R" }[row.osm_type];
-  return `nominatim:${prefix}${String(row.osm_id)}`;
+  const rawId = String(row.osm_id);
+  return /^\d{1,30}$/u.test(rawId) ? `nominatim:${prefix}${rawId}` : null;
 }
 
 function areaLabel(

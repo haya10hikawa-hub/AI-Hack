@@ -76,6 +76,11 @@ assert.doesNotMatch(
 assert.match(migration, /create table public\.canonical_places/);
 assert.match(migration, /unique \(provider, provider_place_id\)/);
 assert.match(migration, /source = 'user_selected'/);
+assert.match(migration, /create policy canonical_places_owner_select/);
+assert.match(
+  migration,
+  /grant select on table public\.canonical_places, public\.memory_places to authenticated/,
+);
 assert.doesNotMatch(
   migration.match(/create table public\.canonical_places[\s\S]*?\n\);/)?.[0] ??
     "",

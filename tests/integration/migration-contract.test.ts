@@ -201,5 +201,12 @@ describe("baseline migration security contract", () => {
     expect(sql).toMatch(
       /revoke all on table public\.canonical_places, public\.memory_places from anon, authenticated/iu,
     );
+    expect(sql).toMatch(/create policy canonical_places_owner_select/iu);
+    expect(sql).toMatch(
+      /memory_place\.place_id = canonical_places\.id[\s\S]*memory_place\.user_id = \(select auth\.uid\(\)\)/iu,
+    );
+    expect(sql).toMatch(
+      /grant select on table public\.canonical_places, public\.memory_places to authenticated/iu,
+    );
   });
 });

@@ -96,4 +96,64 @@ describe("place provider privacy and validation", () => {
       PlaceProviderUnavailableError,
     );
   });
+
+  it("returns zero or one candidate without manufacturing results", async () => {
+    const empty = createPlaceProviderFromEnv({
+      endpoint: "http://provider.test",
+      fetchImplementation: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response("[]", { status: 200 })),
+    });
+    const single = createPlaceProviderFromEnv({
+      endpoint: "http://provider.test",
+      fetchImplementation: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          new Response(JSON.stringify([kamiyama]), { status: 200 }),
+        ),
+    });
+
+    await expect(empty.search("候補なし")).resolves.toEqual([]);
+    await expect(single.search("単一候補")).resolves.toHaveLength(1);
+  });
+
+  it("deduplicates provider rows and discards malformed provider IDs", async () => {
+    const provider = createPlaceProviderFromEnv({
+      endpoint: "http://provider.test",
+      fetchImplementation: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify([
+              kamiyama,
+              kamiyama,
+              { ...kamiyama, osm_id: "../101" },
+            ]),
+            { status: 200 },
+          ),
+        ),
+    });
+
+    await expect(provider.search("神山中学校")).resolves.toHaveLength(1);
+  });
+
+  it("turns a provider timeout into an unavailable error", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Timed out", "AbortError")),
+          );
+        }),
+    );
+    const provider = createPlaceProviderFromEnv({
+      endpoint: "http://provider.test",
+      fetchImplementation,
+      timeoutMs: 5,
+    });
+
+    await expect(provider.search("神山")).rejects.toBeInstanceOf(
+      PlaceProviderUnavailableError,
+    );
+  });
 });

@@ -53,6 +53,54 @@ const revealedMap = {
   ],
 };
 
+test("a canonical Place appears in Memory Detail and hands off only its trusted linked cell", async ({
+  page,
+}) => {
+  await mockAuthenticatedUser(page);
+  await page.route(`**/api/memories/${memoryId}`, (route) =>
+    json(route, {
+      memory: {
+        id: memoryId,
+        title: "FTC練習",
+        capturedAt: "2026-08-14T09:00:00.000Z",
+        placeLabel: "神山中学校",
+        placeState: "confirmed",
+        place: {
+          canonicalId: "22222222-2222-4222-8222-222222222222",
+          provider: "nominatim",
+          providerPlaceId: "N101",
+          label: "神山中学校",
+          area: "徳島県 神山町",
+          category: "学校",
+          source: "user_selected",
+          truthState: "confirmed",
+          mapCellId: cellId,
+        },
+        photoCount: 2,
+        representativeImageUrl: null,
+        state: "confirmed",
+        processingState: "ready",
+      },
+      reconstruction: null,
+      claims: [],
+      evidence: [],
+      partial: false,
+    }),
+  );
+  await page.route("**/api/map", (route) => json(route, revealedMap));
+
+  await page.goto(`/memories/${memoryId}`);
+  await expect(page.getByText("神山中学校")).toBeVisible();
+  await expect(page.getByText("徳島県 神山町")).toBeVisible();
+  await expect(page.getByText("学校")).toBeVisible();
+  const mapLink = page.getByRole("link", {
+    name: "Memory Mapでこの場所を見る",
+  });
+  await expect(mapLink).toHaveAttribute("href", `/map?cellId=${cellId}`);
+  await mapLink.click();
+  await expect(page.getByRole("heading", { name: "神山周辺" })).toBeVisible();
+});
+
 test("Memory Map reveals only a privacy-safe cell and opens a real Memory", async ({
   page,
 }) => {

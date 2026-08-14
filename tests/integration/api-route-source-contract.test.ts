@@ -151,6 +151,14 @@ describe("API route implementation contracts", () => {
     }
   });
 
+  it("reports optional Place Picker provider readiness without making upload unhealthy", () => {
+    expect(health).toContain("process.env.PLACE_PROVIDER_API_BASE_URL");
+    expect(health).toContain("placeProviderConfiguration");
+    expect(health.match(/const ready =[\s\S]*?;/u)?.[0]).not.toContain(
+      "placeProviderConfigured",
+    );
+  });
+
   it("accepts only privacy-safe Map cells and scopes every mutation to the session owner", () => {
     expect(memoryMap).toMatch(/\.strict\(\)/u);
     expect(memoryMap).toMatch(/refine\(isAllowedMemoryMapCell\)/u);

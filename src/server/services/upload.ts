@@ -876,22 +876,18 @@ async function persistSelectedPlace(
   if (linked.error !== null) throw new RepositoryError("link_memory_place");
 
   if (!input.useMemoryMap) return;
-  const now = new Date().toISOString();
-  const cell = await client.from("memory_map_cells").upsert(
-    {
-      user_id: input.userId,
-      cell_id: input.place.mapCellId,
-      state: "memory",
-      first_seen_at: now,
-      last_seen_at: now,
-      visit_count: 1,
-      evidence_count: 1,
-      memory_count: 1,
-      coarse_place: input.place.displayName,
-    },
-    { onConflict: "user_id,cell_id", ignoreDuplicates: true },
-  );
+  const cell = await client.rpc("reveal_memory_map_cell", {
+    p_user_id: input.userId,
+    p_cell_id: input.place.mapCellId,
+  });
   if (cell.error !== null) throw new RepositoryError("persist_place_map_cell");
+  const cellLabel = await client
+    .from("memory_map_cells")
+    .update({ coarse_place: input.place.displayName })
+    .eq("user_id", input.userId)
+    .eq("cell_id", input.place.mapCellId);
+  if (cellLabel.error !== null)
+    throw new RepositoryError("label_place_map_cell");
   const mapLink = await client.from("memory_map_cell_memories").upsert(
     {
       user_id: input.userId,

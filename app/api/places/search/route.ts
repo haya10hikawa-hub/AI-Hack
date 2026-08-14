@@ -11,6 +11,10 @@ import {
   createPlaceProviderFromEnv,
   PlaceProviderUnavailableError,
 } from "@/src/server/places/provider";
+import {
+  guardedPlaceSearch,
+  PlaceSearchRateLimitError,
+} from "@/src/server/places/search-guard";
 import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
 
 const QuerySchema = z
@@ -24,13 +28,25 @@ export const maxDuration = 10;
 export async function GET(request: NextRequest) {
   const id = requestId(request);
   try {
-    await requireAuthenticatedUser();
+    const { user } = await requireAuthenticatedUser();
     const query = QuerySchema.parse(
       request.nextUrl.searchParams.get("q") ?? "",
     );
-    const candidates = await createPlaceProviderFromEnv().search(query);
+    const candidates = await guardedPlaceSearch({
+      userId: user.id,
+      query,
+      provider: createPlaceProviderFromEnv(),
+    });
     return dataResponse({ candidates });
   } catch (error) {
+    if (error instanceof PlaceSearchRateLimitError) {
+      return errorResponse(
+        429,
+        "PLACE_SEARCH_RATE_LIMITED",
+        "場所検索が続いています。少し待ってからもう一度お試しください。",
+        id,
+      );
+    }
     if (error instanceof PlaceProviderUnavailableError) {
       return errorResponse(
         503,

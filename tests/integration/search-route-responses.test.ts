@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   persistAIRun: vi.fn(),
   persistAIProviderFailure: vi.fn(),
   getMemoryThread: vi.fn(),
+  loadMemoryPlaces: vi.fn(),
 }));
 
 vi.mock("@/src/server/supabase/auth", () => {
@@ -52,6 +53,7 @@ vi.mock("@/src/server/services/memories", () => {
   return {
     RepositoryError,
     getMemoryThread: mocks.getMemoryThread,
+    loadMemoryPlaces: mocks.loadMemoryPlaces,
   };
 });
 
@@ -93,6 +95,20 @@ const SearchResponseSchema = z
     partial: z.boolean().optional(),
     partialMessage: z.string().nullable().optional(),
     feedbackEnabled: z.boolean().optional(),
+    place: z
+      .object({
+        canonicalId: z.string().uuid().nullable(),
+        provider: z.string().nullable(),
+        providerPlaceId: z.string().nullable(),
+        label: z.string(),
+        area: z.string().nullable(),
+        category: z.string().nullable(),
+        source: z.enum(["user_selected", "legacy"]),
+        truthState: z.enum(["confirmed", "inferred", "evidence", "unknown"]),
+        mapCellId: z.string().nullable(),
+      })
+      .strict()
+      .nullable(),
   })
   .strict();
 
@@ -215,6 +231,7 @@ describe("search route response contracts", () => {
     );
     mocks.persistAIProviderFailure.mockResolvedValue(undefined);
     mocks.createSupabaseAdminClient.mockReturnValue({});
+    mocks.loadMemoryPlaces.mockResolvedValue(new Map());
     mocks.getMemoryThread.mockImplementation(async () => ({
       memories:
         scenario === "ambiguous"
@@ -245,10 +262,12 @@ describe("search route response contracts", () => {
     });
 
     const response = await searchMemories(jsonRequest("missing memory"));
+    const body = await response.json();
+    expect(body).toHaveProperty("data");
     const envelope = z
       .object({ data: SearchResponseSchema })
       .strict()
-      .parse(await response.json());
+      .parse(body);
 
     expect(response.status).toBe(200);
     expect(envelope.data).toMatchObject({
@@ -405,6 +424,118 @@ describe("search route response contracts", () => {
       },
     ]);
     expect(envelope.data.clarification).toBeNull();
+  });
+
+  it("returns a confirmed canonical place and Map handoff only when the location claim is cited", async () => {
+    scenario = "grounded";
+    const cellId = "8a2e6e82175ffff";
+    const locationClaim = {
+      id: claimId,
+      field: "location",
+      value_json: {
+        label: "神山中学校",
+        provider: "nominatim",
+        providerPlaceId: "N101",
+        source: "user_selected",
+      },
+      origin: "user",
+      confidence_band: "high",
+      confirmation_status: "user_confirmed",
+      status: "active",
+      ai_run_id: null,
+      source_correction_id: correctionId,
+      created_at: now,
+      updated_at: now,
+      claim_evidence: [],
+    };
+    const tableData: Record<string, unknown> = {
+      memories: [
+        memoryRow({
+          id: memoryId,
+          eventId,
+          title: "神山でのMemory",
+          claim: locationClaim,
+        }),
+      ],
+      evidence: [],
+      user_corrections: [
+        {
+          id: correctionId,
+          memory_id: memoryId,
+          target_claim_id: null,
+          action: "replace",
+          value_json: locationClaim.value_json,
+          created_claim_id: claimId,
+          idempotency_key: "place-confirmation",
+          created_at: now,
+        },
+      ],
+      memory_gaps: null,
+    };
+    const supabase = {
+      from: vi.fn((table: string) => resultBuilder(tableData[table] ?? [])),
+    };
+    mocks.requireAuthenticatedUser.mockResolvedValue({
+      user: { id: userId },
+      supabase,
+    });
+    mocks.loadMemoryPlaces.mockResolvedValue(
+      new Map([
+        [
+          memoryId,
+          {
+            canonicalId: "77777777-7777-4777-8777-777777777777",
+            provider: "nominatim",
+            providerPlaceId: "N101",
+            label: "神山中学校",
+            area: "徳島県 神山町",
+            category: "学校",
+            source: "user_selected",
+            truthState: "confirmed",
+            mapCellId: cellId,
+          },
+        ],
+      ]),
+    );
+    mocks.createAIProviderFromEnv.mockReturnValue({
+      parseSearchQuery: vi.fn().mockResolvedValue({
+        data: parsedQuery(["神山"]),
+        run: run(),
+      }),
+      rerankSearchCandidates: vi.fn().mockResolvedValue({
+        data: {
+          ranked: [{ memoryId, score: 0.95, matchReasons: ["場所が一致"] }],
+        },
+        run: run(),
+      }),
+      generateGroundedAnswer: vi.fn().mockResolvedValue({
+        data: {
+          mode: "answer",
+          segments: [{ text: "神山中学校です。", claimIds: [claimId] }],
+          unknownReason: null,
+          clarificationQuestion: null,
+        },
+        run: run(),
+      }),
+    });
+
+    const response = await searchMemories(jsonRequest("どこにいた？ 神山"));
+    const responseBody = await response.json();
+    expect(responseBody).toHaveProperty("data");
+    const envelope = z
+      .object({ data: SearchResponseSchema })
+      .strict()
+      .parse(responseBody);
+
+    expect(envelope.data.answerState).toBe("grounded");
+    expect(envelope.data.place).toMatchObject({
+      label: "神山中学校",
+      truthState: "confirmed",
+      mapCellId: cellId,
+    });
+    expect(JSON.stringify(envelope.data)).not.toMatch(
+      /\b(?:lat|lng|latitude|longitude)\b/iu,
+    );
   });
 
   it("restricts Map Recall to active Memories linked to an owned valid cell", async () => {

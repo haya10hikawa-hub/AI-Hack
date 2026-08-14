@@ -23,6 +23,7 @@ export function PlacePicker({
     "idle" | "loading" | "ready" | "empty" | "error"
   >("idle");
   const requestSequence = useRef(0);
+  const resultsRef = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     if (selected !== null) return;
@@ -54,6 +55,11 @@ export function PlacePicker({
       controller.abort();
     };
   }, [query, selected]);
+
+  useEffect(() => {
+    if (status !== "ready" || candidates.length === 0) return;
+    resultsRef.current?.scrollIntoView({ block: "nearest" });
+  }, [candidates.length, status]);
 
   const choose = (candidate: PlaceCandidate) => {
     requestSequence.current += 1;
@@ -121,6 +127,8 @@ export function PlacePicker({
           aria-describedby={statusId}
           autoComplete="off"
           disabled={disabled}
+          enterKeyHint="search"
+          inputMode="search"
           maxLength={80}
           placeholder="場所の名前を検索"
           value={query}
@@ -166,7 +174,12 @@ export function PlacePicker({
       </p>
 
       {status === "ready" && candidates.length > 0 ? (
-        <ul className="place-picker-results" id={listboxId} role="listbox">
+        <ul
+          ref={resultsRef}
+          className="place-picker-results"
+          id={listboxId}
+          role="listbox"
+        >
           {candidates.map((candidate, index) => (
             <li
               id={`${listboxId}-option-${index}`}
@@ -174,23 +187,19 @@ export function PlacePicker({
               role="option"
               aria-selected={activeIndex === index}
               className={activeIndex === index ? "is-active" : ""}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => choose(candidate)}
+              onMouseEnter={() => setActiveIndex(index)}
             >
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => choose(candidate)}
-                onMouseEnter={() => setActiveIndex(index)}
-              >
-                <MapPin aria-hidden="true" size={20} />
-                <span>
-                  <strong>{candidate.name}</strong>
-                  <small>
-                    {[candidate.area, candidate.category]
-                      .filter(Boolean)
-                      .join(" / ") || "地域・カテゴリ未登録"}
-                  </small>
-                </span>
-              </button>
+              <MapPin aria-hidden="true" size={20} />
+              <span>
+                <strong>{candidate.name}</strong>
+                <small>
+                  {[candidate.area, candidate.category]
+                    .filter(Boolean)
+                    .join(" / ") || "地域・カテゴリ未登録"}
+                </small>
+              </span>
             </li>
           ))}
         </ul>

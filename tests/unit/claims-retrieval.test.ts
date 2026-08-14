@@ -68,6 +68,50 @@ describe("claim and correction invariants", () => {
 });
 
 describe("retrieval eligibility and provenance", () => {
+  it("grounds a user-selected value created without a previous target claim", () => {
+    const selectedPlaceClaim: Claim = {
+      id: "place-claim",
+      userId: "user-a",
+      memoryId: "memory-a",
+      field: "location",
+      value: { label: "神山中学校", source: "user_selected" },
+      origin: "user",
+      confidenceBand: "high",
+      confirmationStatus: "user_confirmed",
+      status: "active",
+      evidenceIds: [],
+      aiRunId: null,
+      sourceCorrectionId: "place-correction",
+      dedupeKey: "place-selection",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const collected = collectGroundedFacts({
+      memoryId: "memory-a",
+      memoryStatus: "active",
+      claims: [selectedPlaceClaim],
+      evidence: [],
+      corrections: [
+        {
+          id: "place-correction",
+          userId: "user-a",
+          memoryId: "memory-a",
+          targetClaimId: null,
+          action: "replace",
+          value: selectedPlaceClaim.value,
+          createdClaimId: selectedPlaceClaim.id,
+          idempotencyKey: "place-selection",
+          createdAt: now,
+        },
+      ],
+    });
+
+    expect(collected.facts).toMatchObject([
+      { claimId: "place-claim", truthLayer: "user_confirmed" },
+    ]);
+  });
+
   it("prefers a traced user correction over AI inference for the same field", () => {
     const correctionResult = applyUserCorrection({
       targetClaim: aiClaim(),

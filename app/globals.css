@@ -1614,6 +1614,7 @@ h3 {
   max-height: min(280px, 36vh);
   margin: 0;
   padding: 4px;
+  scroll-margin-bottom: calc(76px + env(safe-area-inset-bottom));
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--color-border);
@@ -1627,7 +1628,7 @@ h3 {
   border-top: 1px solid var(--color-border);
 }
 
-.place-picker-results button {
+.place-picker-results li {
   display: grid;
   width: 100%;
   min-height: 64px;
@@ -1639,11 +1640,12 @@ h3 {
   gap: 11px;
   background: transparent;
   color: var(--color-primary);
+  cursor: pointer;
   text-align: left;
 }
 
-.place-picker-results li.is-active button,
-.place-picker-results button:hover {
+.place-picker-results li.is-active,
+.place-picker-results li:hover {
   background: var(--color-indigo-soft);
 }
 
@@ -1680,7 +1682,8 @@ h3 {
   }
 
   .place-picker-results {
-    max-height: min(240px, 32vh);
+    max-height: min(240px, 32dvh);
+    scroll-padding-block: 8px;
   }
 }
 
@@ -2129,6 +2132,29 @@ h3 {
 .memory-facts dd {
   margin: 0;
   font-size: 14px;
+}
+
+.memory-facts dd small {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-ink-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.memory-place-map-link {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 44px;
+  padding: 9px 13px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
 }
 
 .memory-detail__description {

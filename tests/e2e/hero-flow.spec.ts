@@ -38,6 +38,7 @@ interface HeroApiObservations {
     timezone: string;
     placeCandidateId: string | null;
   } | null;
+  placeSearchQueries: string[];
 }
 
 async function installHeroApi(page: Page): Promise<HeroApiObservations> {
@@ -46,6 +47,7 @@ async function installHeroApi(page: Page): Promise<HeroApiObservations> {
     preparedFiles: [],
     signedUploads: [],
     completion: null,
+    placeSearchQueries: [],
   };
 
   await page.route(
@@ -100,21 +102,36 @@ async function installHeroApi(page: Page): Promise<HeroApiObservations> {
       });
     }
     if (url.pathname === "/api/places/search" && request.method() === "GET") {
+      const query = url.searchParams.get("q") ?? "";
+      observations.placeSearchQueries.push(query);
+      const candidates =
+        query === "候補なし"
+          ? []
+          : query === "単一候補"
+            ? [
+                {
+                  id: "nominatim:N101",
+                  name: "神山中学校",
+                  area: "徳島県 神山町",
+                  category: "学校",
+                },
+              ]
+            : [
+                {
+                  id: "nominatim:N101",
+                  name: "神山中学校",
+                  area: "徳島県 神山町",
+                  category: "学校",
+                },
+                {
+                  id: "nominatim:N102",
+                  name: "神山中学校",
+                  area: "香川県 高松市",
+                  category: "学校",
+                },
+              ];
       return json(route, {
-        candidates: [
-          {
-            id: "nominatim:N101",
-            name: "神山中学校",
-            area: "徳島県 神山町",
-            category: "学校",
-          },
-          {
-            id: "nominatim:N102",
-            name: "神山中学校",
-            area: "香川県 高松市",
-            category: "学校",
-          },
-        ],
+        candidates,
       });
     }
     if (
@@ -296,10 +313,7 @@ test("10 photos become a clarifiable, corrected and grounded memory", async ({
   await expect(page.getByText("選択中の写真")).toBeVisible();
   await page.getByLabel("場所を追加（任意）").fill("神山中学校");
   await expect(page.getByRole("option")).toHaveCount(2);
-  await page
-    .getByRole("option", { name: /徳島県 神山町/u })
-    .getByRole("button")
-    .click();
+  await page.getByRole("option", { name: /徳島県 神山町/u }).click();
   await expect(page.getByText(/神山中学校を選択中/u)).toBeVisible();
   await page.getByRole("button", { name: "写真を安全に追加" }).click();
   await expect(page.getByText("受付 10件")).toBeVisible();
@@ -372,6 +386,43 @@ test("10 photos become a clarifiable, corrected and grounded memory", async ({
   );
   expect(overflow).toBe(false);
   expect(consoleErrors).toEqual([]);
+});
+
+test("Place Picker debounces, handles result counts, and remains operable in a keyboard-height viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 500 });
+  const observations = await installHeroApi(page);
+  await page.goto("/add");
+  const input = page.getByLabel("場所を追加（任意）");
+
+  await input.fill("神");
+  await input.fill("神山");
+  await input.fill("神山中");
+  await expect(page.getByRole("option")).toHaveCount(2);
+  expect(observations.placeSearchQueries).toEqual(["神山中"]);
+
+  const resultsBox = await page.getByRole("listbox").boundingBox();
+  expect(resultsBox).not.toBeNull();
+  expect((resultsBox?.y ?? 0) + (resultsBox?.height ?? 0)).toBeLessThanOrEqual(
+    500,
+  );
+
+  await input.press("ArrowDown");
+  await input.press("Enter");
+  await expect(page.getByText(/神山中学校を選択中/u)).toBeVisible();
+  await expect(page.getByText("香川県 高松市 / 学校")).toBeVisible();
+
+  await page.getByRole("button", { name: "選択した場所を解除" }).click();
+  await input.fill("単一候補");
+  await expect(page.getByRole("option")).toHaveCount(1);
+  await page.getByRole("option").click();
+  await expect(page.getByText(/神山中学校を選択中/u)).toBeVisible();
+
+  await page.getByRole("button", { name: "選択した場所を解除" }).click();
+  await input.fill("候補なし");
+  await expect(page.getByText(/場所候補が見つかりません/u)).toBeVisible();
+  await expect(page.getByRole("option")).toHaveCount(0);
 });
 
 test("processing refresh keeps the Memory list and expansion state visible", async ({

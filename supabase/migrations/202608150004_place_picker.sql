@@ -31,6 +31,17 @@ alter table public.memory_places enable row level security;
 revoke all on table public.canonical_places, public.memory_places from anon, authenticated;
 grant select, insert, update on table public.canonical_places to service_role;
 grant select, insert, update, delete on table public.memory_places to service_role;
+grant select on table public.canonical_places, public.memory_places to authenticated;
+
+create policy canonical_places_owner_select on public.canonical_places
+for select to authenticated using (
+  exists (
+    select 1
+    from public.memory_places memory_place
+    where memory_place.place_id = canonical_places.id
+      and memory_place.user_id = (select auth.uid())
+  )
+);
 
 create policy memory_places_owner_select on public.memory_places
 for select to authenticated using ((select auth.uid()) = user_id);

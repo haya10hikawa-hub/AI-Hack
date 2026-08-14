@@ -38,6 +38,9 @@ self-hosted or commercially authorized Nominatim-compatible endpoint whose
 terms allow interactive autocomplete. Exact provider coordinates are reduced
 server-side to an H3 cell and must not be logged or persisted. If the provider
 is unavailable, photo ingestion continues without a selected place.
+`/api/health` reports this optional dependency as
+`checks.placeProviderConfiguration`; it does not make the whole upload service
+unhealthy because place selection is intentionally fail-open.
 
 ## 3. Auth URLs
 
