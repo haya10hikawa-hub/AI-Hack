@@ -44,7 +44,6 @@ import {
   assertPrivacySafeSequenceInput,
   assertRerankReferences,
   assertSequenceAnalysisReferences,
-  canonicalizeSequenceAnalysis,
   type AIInvocationContext,
   type EventClaimsInput,
   type EventClaimsOutput,
@@ -110,6 +109,7 @@ interface Invocation<T> {
   imageParts?: Array<{ mimeType: "image/jpeg" | "image/webp"; base64: string }>;
   complexity?: "normal" | "high";
   postValidate?: (output: T) => void;
+  retryInvalidOutput?: boolean;
 }
 
 export class OrcaRouterProvider implements AIProvider {
@@ -194,8 +194,9 @@ export class OrcaRouterProvider implements AIProvider {
         base64: derivativeBase64,
       })),
       postValidate: (output) => assertSequenceAnalysisReferences(output, input),
+      retryInvalidOutput: true,
     });
-    return { ...result, data: canonicalizeSequenceAnalysis(result.data) };
+    return result;
   }
 
   async generateEventClaims(
@@ -387,7 +388,11 @@ export class OrcaRouterProvider implements AIProvider {
       estimatedInputTokens,
       inputImages: invocation.inputImages,
     });
-    const maximumCost = maximumAttemptCost * (this.maxRetries + 1);
+    const maximumRetries = Math.max(
+      this.maxRetries,
+      invocation.retryInvalidOutput ? 1 : 0,
+    );
+    const maximumCost = maximumAttemptCost * (maximumRetries + 1);
     let reservation: Awaited<ReturnType<AICostGuard["reserve"]>>;
     try {
       reservation = await this.costGuard.reserve(
@@ -453,7 +458,7 @@ export class OrcaRouterProvider implements AIProvider {
             throw new AIProviderError(
               "invalid_output",
               "AI provider returned an invalid completion envelope.",
-              false,
+              invocation.retryInvalidOutput ?? false,
               { cause: error },
             );
           }
@@ -462,13 +467,14 @@ export class OrcaRouterProvider implements AIProvider {
             const rawContent: unknown = JSON.parse(
               completionEnvelope.choices[0]!.message.content,
             );
-            output = invocation.schema.parse(rawContent);
-            invocation.postValidate?.(output);
+            const candidate = invocation.schema.parse(rawContent);
+            invocation.postValidate?.(candidate);
+            output = candidate;
           } catch (error) {
             throw new AIProviderError(
               "invalid_output",
               "AI structured output failed validation.",
-              false,
+              invocation.retryInvalidOutput ?? false,
               { cause: error },
             );
           }
@@ -494,7 +500,11 @@ export class OrcaRouterProvider implements AIProvider {
         } catch (rawError) {
           const error = normalizeProviderError(rawError);
           accumulatedCost += maximumAttemptCost;
-          if (error.retryable && retryCount < this.maxRetries) {
+          const retryLimit =
+            error.code === "invalid_output" && invocation.retryInvalidOutput
+              ? 1
+              : this.maxRetries;
+          if (error.retryable && retryCount < retryLimit) {
             continue;
           }
           throw error;

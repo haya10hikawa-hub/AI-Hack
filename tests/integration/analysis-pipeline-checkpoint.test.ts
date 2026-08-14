@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createAIProviderFromEnv: vi.fn(),
   persistAIRun: vi.fn(),
+  toAssetSemanticRepresentations: vi.fn(),
 }));
 
 vi.mock("@/src/server/ai", () => ({
@@ -10,6 +11,7 @@ vi.mock("@/src/server/ai", () => ({
   SupabaseRateLimitStore: class SupabaseRateLimitStore {},
   createAIProviderFromEnv: mocks.createAIProviderFromEnv,
   persistAIRun: mocks.persistAIRun,
+  toAssetSemanticRepresentations: mocks.toAssetSemanticRepresentations,
 }));
 
 import { analyzePersistedSequence } from "@/src/server/services/analysis-pipeline";
@@ -113,6 +115,7 @@ describe("analysis pipeline checkpoints", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.persistAIRun.mockResolvedValue("run-1");
+    mocks.toAssetSemanticRepresentations.mockReturnValue([]);
     mocks.createAIProviderFromEnv.mockReturnValue({
       analyzeSequence,
       generateEventClaims,

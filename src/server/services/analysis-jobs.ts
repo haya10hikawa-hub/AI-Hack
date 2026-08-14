@@ -19,7 +19,7 @@ const JOB_LEASE_SECONDS = 75;
 interface SequenceJobInput {
   sequenceId: string;
   memoryId: string;
-  representativeAssets: Array<{ id: string }>;
+  analysisCandidates: Array<{ id: string }>;
 }
 
 interface ClaimedJob {
@@ -46,7 +46,7 @@ export async function enqueueSequenceAnalysisJobs(input: {
 }): Promise<number> {
   let enqueued = 0;
   for (const sequence of input.sequences) {
-    if (sequence.representativeAssets.length === 0) continue;
+    if (sequence.analysisCandidates.length === 0) continue;
     const result = await input.database.rpc("enqueue_sequence_analysis_job", {
       p_user_id: input.userId,
       p_sequence_id: sequence.sequenceId,

@@ -49,6 +49,48 @@ const EvidenceSchema = z.object({
   validity: z.string(),
 });
 
+const RepresentativeRoleSchema = z.enum([
+  "identity",
+  "key_moment",
+  "complement",
+]);
+
+const RepresentativeRowSchema = z.object({
+  memory_id: z.string().uuid(),
+  asset_id: z.string().uuid(),
+  role: RepresentativeRoleSchema,
+  asset: z
+    .union([
+      z.object({
+        id: z.string().uuid(),
+        derivative_storage_key: z.string().nullable(),
+        analysis_status: z.string(),
+      }),
+      z.array(
+        z.object({
+          id: z.string().uuid(),
+          derivative_storage_key: z.string().nullable(),
+          analysis_status: z.string(),
+        }),
+      ),
+    ])
+    .nullable(),
+});
+
+const MemoryRelationSchema = z.object({
+  source_memory_id: z.string().uuid(),
+  target_memory_id: z.string().uuid(),
+  relation_type: z.enum(["before", "same_place", "same_activity"]),
+  origin: z.enum(["deterministic", "ai", "user"]),
+  confirmation_status: z.enum(["unconfirmed", "user_confirmed", "disputed"]),
+});
+
+const RelatedMemoryRowSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  event: z.union([EventSchema, z.array(EventSchema)]).nullable(),
+});
+
 type Client = SupabaseClient;
 
 export class RepositoryError extends Error {
@@ -60,6 +102,33 @@ export class RepositoryError extends Error {
 
 function oneEvent(value: z.infer<typeof MemorySchema>["event"]) {
   return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function oneAsset(value: z.infer<typeof RepresentativeRowSchema>["asset"]) {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function relationState(
+  relation: z.infer<typeof MemoryRelationSchema>,
+): "confirmed" | "inferred" {
+  return relation.origin === "ai" &&
+    relation.confirmation_status !== "user_confirmed"
+    ? "inferred"
+    : "confirmed";
+}
+
+function relationLabel(
+  relationType: z.infer<typeof MemoryRelationSchema>["relation_type"],
+  title: string,
+): string {
+  switch (relationType) {
+    case "before":
+      return `「${title}」と時間でつながるMemory`;
+    case "same_place":
+      return `「${title}」と同じ場所`;
+    case "same_activity":
+      return `「${title}」と同じ活動`;
+  }
 }
 
 function displayValue(value: unknown): string {
@@ -121,50 +190,90 @@ export async function getMemoryThread(client: Client, userId: string) {
     .map((memory) => oneEvent(memory.event)?.id ?? null)
     .filter((id): id is string => id !== null);
 
-  const [claimResult, gapResult, sequenceAssetResult, evidenceResult] =
-    await Promise.all([
-      memoryIds.length === 0
-        ? Promise.resolve({ data: [], error: null })
-        : client
-            .from("claims")
-            .select(
-              "id,memory_id,field,value_json,origin,confirmation_status,status",
-            )
-            .eq("user_id", userId)
-            .in("memory_id", memoryIds)
-            .eq("status", "active"),
-      memoryIds.length === 0
-        ? Promise.resolve({ data: [], error: null })
-        : client
-            .from("memory_gaps")
-            .select("id,memory_id,status")
-            .eq("user_id", userId)
-            .in("memory_id", memoryIds)
-            .or(
-              `status.eq.ready_to_ask,and(status.eq.deferred,deferred_until.lte.${now})`,
-            ),
-      sequenceIds.length === 0
-        ? Promise.resolve({ data: [], error: null })
-        : client
-            .from("sequence_assets")
-            .select(
-              "sequence_id,is_representative,asset:media_assets(id,derivative_storage_key,analysis_status)",
-            )
-            .in("sequence_id", sequenceIds),
-      eventIds.length === 0
-        ? Promise.resolve({ data: [], error: null })
-        : client
-            .from("evidence")
-            .select("id,event_id")
-            .eq("user_id", userId)
-            .in("event_id", eventIds)
-            .eq("validity", "valid"),
-    ]);
+  const [
+    claimResult,
+    gapResult,
+    sequenceAssetResult,
+    evidenceResult,
+    representativeResult,
+    sourceRelationResult,
+    targetRelationResult,
+  ] = await Promise.all([
+    memoryIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("claims")
+          .select(
+            "id,memory_id,field,value_json,origin,confirmation_status,status",
+          )
+          .eq("user_id", userId)
+          .in("memory_id", memoryIds)
+          .eq("status", "active"),
+    memoryIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("memory_gaps")
+          .select("id,memory_id,status")
+          .eq("user_id", userId)
+          .in("memory_id", memoryIds)
+          .or(
+            `status.eq.ready_to_ask,and(status.eq.deferred,deferred_until.lte.${now})`,
+          ),
+    sequenceIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("sequence_assets")
+          .select(
+            "sequence_id,is_representative,asset:media_assets(id,derivative_storage_key,analysis_status)",
+          )
+          .in("sequence_id", sequenceIds)
+          .order("position", { ascending: true }),
+    eventIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("evidence")
+          .select("id,event_id")
+          .eq("user_id", userId)
+          .in("event_id", eventIds)
+          .eq("validity", "valid"),
+    memoryIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("memory_representatives")
+          .select(
+            "memory_id,asset_id,role,asset:media_assets(id,derivative_storage_key,analysis_status)",
+          )
+          .eq("user_id", userId)
+          .in("memory_id", memoryIds),
+    memoryIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("memory_relations")
+          .select(
+            "source_memory_id,target_memory_id,relation_type,origin,confirmation_status",
+          )
+          .eq("user_id", userId)
+          .in("source_memory_id", memoryIds)
+          .limit(200),
+    memoryIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("memory_relations")
+          .select(
+            "source_memory_id,target_memory_id,relation_type,origin,confirmation_status",
+          )
+          .eq("user_id", userId)
+          .in("target_memory_id", memoryIds)
+          .limit(200),
+  ]);
   if (
     claimResult.error !== null ||
     gapResult.error !== null ||
     sequenceAssetResult.error !== null ||
-    evidenceResult.error !== null
+    evidenceResult.error !== null ||
+    representativeResult.error !== null ||
+    sourceRelationResult.error !== null ||
+    targetRelationResult.error !== null
   ) {
     throw new RepositoryError("assemble_memory_thread");
   }
@@ -213,14 +322,64 @@ export async function getMemoryThread(client: Client, userId: string) {
     }
     if (
       record.is_representative === true &&
-      typeof asset.derivative_storage_key === "string"
+      typeof asset.derivative_storage_key === "string" &&
+      !representativePath.has(sequenceId)
     ) {
       representativePath.set(sequenceId, asset.derivative_storage_key);
     }
   });
+  const semanticPaths = new Map<
+    string,
+    Map<z.infer<typeof RepresentativeRoleSchema>, string>
+  >();
+  for (const row of representativeResult.data ?? []) {
+    const parsed = RepresentativeRowSchema.safeParse(row);
+    if (!parsed.success) continue;
+    const asset = oneAsset(parsed.data.asset);
+    if (
+      asset === null ||
+      typeof asset.derivative_storage_key !== "string" ||
+      asset.analysis_status === "failed"
+    )
+      continue;
+    const roles = semanticPaths.get(parsed.data.memory_id) ?? new Map();
+    roles.set(parsed.data.role, asset.derivative_storage_key);
+    semanticPaths.set(parsed.data.memory_id, roles);
+  }
   const urls = await signedDerivativeUrls(client, [
     ...representativePath.values(),
+    ...[...semanticPaths.values()].flatMap((roles) => [...roles.values()]),
   ]);
+
+  const titleByMemory = new Map(memories.map(({ id, title }) => [id, title]));
+  const relationsByMemory = new Map<
+    string,
+    z.infer<typeof MemoryRelationSchema>
+  >();
+  const relationRows = [
+    ...(sourceRelationResult.data ?? []),
+    ...(targetRelationResult.data ?? []),
+  ];
+  for (const row of relationRows) {
+    const parsed = MemoryRelationSchema.safeParse(row);
+    if (!parsed.success) continue;
+    for (const memoryId of [
+      parsed.data.source_memory_id,
+      parsed.data.target_memory_id,
+    ]) {
+      const otherId =
+        memoryId === parsed.data.source_memory_id
+          ? parsed.data.target_memory_id
+          : parsed.data.source_memory_id;
+      if (
+        titleByMemory.has(memoryId) &&
+        titleByMemory.has(otherId) &&
+        !relationsByMemory.has(memoryId)
+      ) {
+        relationsByMemory.set(memoryId, parsed.data);
+      }
+    }
+  }
 
   const evidenceCount = new Map<string, number>();
   (evidenceResult.data ?? []).forEach((row) => {
@@ -242,9 +401,16 @@ export async function getMemoryThread(client: Client, userId: string) {
     );
     const hasInference = memoryClaims.some((claim) => claim.origin === "ai");
     const sequenceId = event?.sequence_id ?? null;
-    const imagePath = sequenceId
-      ? representativePath.get(sequenceId)
-      : undefined;
+    const imagePath =
+      semanticPaths.get(memory.id)?.get("identity") ??
+      (sequenceId ? representativePath.get(sequenceId) : undefined);
+    const relation = relationsByMemory.get(memory.id);
+    const relatedMemoryId =
+      relation === undefined
+        ? null
+        : relation.source_memory_id === memory.id
+          ? relation.target_memory_id
+          : relation.source_memory_id;
     return {
       id: memory.id,
       title: memory.title,
@@ -269,8 +435,14 @@ export async function getMemoryThread(client: Client, userId: string) {
             ? ("failed" as const)
             : ("ready" as const),
       summary: memory.summary,
-      relationLabel: null,
-      relationState: null,
+      relationLabel:
+        relation === undefined || relatedMemoryId === null
+          ? null
+          : relationLabel(
+              relation.relation_type,
+              titleByMemory.get(relatedMemoryId)!,
+            ),
+      relationState: relation === undefined ? null : relationState(relation),
       hasOpenGap: gapMemoryIds.has(memory.id),
       evidenceCount: event ? (evidenceCount.get(event.id) ?? 0) : 0,
     };
@@ -309,27 +481,48 @@ export async function getMemoryDetail(
   const memory = MemorySchema.parse(data);
   const event = oneEvent(memory.event);
 
-  const [claimResult, evidenceResult] = await Promise.all([
-    client
-      .from("claims")
-      .select(
-        "id,memory_id,field,value_json,origin,confirmation_status,status,claim_evidence(evidence_id)",
-      )
-      .eq("user_id", userId)
-      .eq("memory_id", memoryId)
-      .eq("status", "active"),
-    event === null
-      ? Promise.resolve({ data: [], error: null })
-      : client
-          .from("evidence")
-          .select(
-            "id,event_id,asset_id,kind,field,value_json,source_type,observed_at,validity",
-          )
-          .eq("user_id", userId)
-          .eq("event_id", event.id)
-          .in("validity", ["valid", "uncertain"]),
-  ]);
-  if (claimResult.error !== null || evidenceResult.error !== null) {
+  const [claimResult, evidenceResult, representativeResult, relationResult] =
+    await Promise.all([
+      client
+        .from("claims")
+        .select(
+          "id,memory_id,field,value_json,origin,confirmation_status,status,claim_evidence(evidence_id)",
+        )
+        .eq("user_id", userId)
+        .eq("memory_id", memoryId)
+        .eq("status", "active"),
+      event === null
+        ? Promise.resolve({ data: [], error: null })
+        : client
+            .from("evidence")
+            .select(
+              "id,event_id,asset_id,kind,field,value_json,source_type,observed_at,validity",
+            )
+            .eq("user_id", userId)
+            .eq("event_id", event.id)
+            .in("validity", ["valid", "uncertain"]),
+      client
+        .from("memory_representatives")
+        .select(
+          "memory_id,asset_id,role,asset:media_assets(id,derivative_storage_key,analysis_status)",
+        )
+        .eq("user_id", userId)
+        .eq("memory_id", memoryId),
+      client
+        .from("memory_relations")
+        .select(
+          "source_memory_id,target_memory_id,relation_type,origin,confirmation_status",
+        )
+        .eq("user_id", userId)
+        .or(`source_memory_id.eq.${memoryId},target_memory_id.eq.${memoryId}`)
+        .limit(6),
+    ]);
+  if (
+    claimResult.error !== null ||
+    evidenceResult.error !== null ||
+    representativeResult.error !== null ||
+    relationResult.error !== null
+  ) {
     throw new RepositoryError("get_memory_provenance");
   }
   const claims = (claimResult.data ?? [])
@@ -366,10 +559,87 @@ export async function getMemoryDetail(
       });
     }
   });
-  const urls = await signedDerivativeUrls(
-    client,
-    [...assetPath.values()].map(({ path }) => path),
+
+  const representatives = (representativeResult.data ?? [])
+    .map((row) => RepresentativeRowSchema.safeParse(row))
+    .filter((result) => result.success)
+    .map((result) => result.data);
+  const representativePaths = new Map<
+    z.infer<typeof RepresentativeRoleSchema>,
+    { assetId: string; path: string }
+  >();
+  for (const representative of representatives) {
+    const asset = oneAsset(representative.asset);
+    if (
+      asset !== null &&
+      typeof asset.derivative_storage_key === "string" &&
+      asset.analysis_status !== "failed"
+    ) {
+      representativePaths.set(representative.role, {
+        assetId: representative.asset_id,
+        path: asset.derivative_storage_key,
+      });
+    }
+  }
+  const relations = (relationResult.data ?? [])
+    .map((row) => MemoryRelationSchema.safeParse(row))
+    .filter((result) => result.success)
+    .map((result) => result.data);
+  const relatedIds = relations.map((relation) =>
+    relation.source_memory_id === memoryId
+      ? relation.target_memory_id
+      : relation.source_memory_id,
   );
+  const [relatedMemoryResult, relatedRepresentativeResult] = await Promise.all([
+    relatedIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("memories")
+          .select(
+            "id,title,event:events(id,sequence_id,started_at,ended_at,coarse_place)",
+          )
+          .eq("user_id", userId)
+          .eq("status", "active")
+          .in("id", relatedIds),
+    relatedIds.length === 0
+      ? Promise.resolve({ data: [], error: null })
+      : client
+          .from("memory_representatives")
+          .select(
+            "memory_id,asset_id,role,asset:media_assets(id,derivative_storage_key,analysis_status)",
+          )
+          .eq("user_id", userId)
+          .eq("role", "identity")
+          .in("memory_id", relatedIds),
+  ]);
+  if (
+    relatedMemoryResult.error !== null ||
+    relatedRepresentativeResult.error !== null
+  ) {
+    throw new RepositoryError("get_related_memories");
+  }
+  const relatedMemories = (relatedMemoryResult.data ?? [])
+    .map((row) => RelatedMemoryRowSchema.safeParse(row))
+    .filter((result) => result.success)
+    .map((result) => result.data);
+  const relatedPaths = new Map<string, string>();
+  for (const row of relatedRepresentativeResult.data ?? []) {
+    const parsed = RepresentativeRowSchema.safeParse(row);
+    if (!parsed.success) continue;
+    const asset = oneAsset(parsed.data.asset);
+    if (
+      asset !== null &&
+      typeof asset.derivative_storage_key === "string" &&
+      asset.analysis_status !== "failed"
+    ) {
+      relatedPaths.set(parsed.data.memory_id, asset.derivative_storage_key);
+    }
+  }
+  const urls = await signedDerivativeUrls(client, [
+    ...[...assetPath.values()].map(({ path }) => path),
+    ...[...representativePaths.values()].map(({ path }) => path),
+    ...relatedPaths.values(),
+  ]);
 
   const thread = await getMemoryThread(client, userId);
   const item = thread.memories.find(({ id }) => id === memoryId);
@@ -381,6 +651,33 @@ export async function getMemoryDetail(
       description: memory.summary,
       updatedAt: memory.updated_at,
     },
+    representatives: {
+      identity: representativePayload("identity"),
+      keyMoment: representativePayload("key_moment"),
+      complement: representativePayload("complement"),
+    },
+    relatedMemories: relations.flatMap((relation) => {
+      const relatedId =
+        relation.source_memory_id === memoryId
+          ? relation.target_memory_id
+          : relation.source_memory_id;
+      const related = relatedMemories.find(({ id }) => id === relatedId);
+      if (related === undefined) return [];
+      const relatedEvent = oneEvent(related.event);
+      const imagePath = relatedPaths.get(relatedId);
+      return [
+        {
+          memoryId: relatedId,
+          title: related.title,
+          capturedAt: relatedEvent?.started_at ?? null,
+          relationType: relation.relation_type,
+          relationState: relationState(relation),
+          representativeImageUrl: imagePath
+            ? (urls.get(imagePath) ?? null)
+            : null,
+        },
+      ];
+    }),
     reconstruction: memory.summary,
     claims: claims.map((claim) => ({
       id: claim.id,
@@ -424,4 +721,17 @@ export async function getMemoryDetail(
           ? "決定的なEvidenceは保存済みです。AI再構成は保存済みの途中結果から再試行できます。"
           : null,
   };
+
+  function representativePayload(
+    role: z.infer<typeof RepresentativeRoleSchema>,
+  ) {
+    const representative = representativePaths.get(role);
+    return representative === undefined
+      ? null
+      : {
+          assetId: representative.assetId,
+          imageUrl: urls.get(representative.path) ?? null,
+          alt: `${memory.title}の写真`,
+        };
+  }
 }

@@ -71,6 +71,10 @@ assert.doesNotMatch(
   migration,
   /create policy rememory_storage_(?:insert|update|delete)_own/,
 );
+assert.match(migration, /unique \(memory_id, role\)/);
+assert.match(migration, /unique \(memory_id, asset_id\)/);
+assert.match(migration, /create unique index memory_relations_dedupe_idx/);
+assert.match(migration, /source_memory_id::text < target_memory_id::text/);
 assert.match(migration, /create table public\.memory_map_cells/);
 assert.match(migration, /cell_id text not null/);
 assert.doesNotMatch(

@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 import {
+  normalizeAssetSemanticRepresentations,
+  type AssetSemanticRepresentation,
+  type EventFacetType,
+} from "../../domain/event-semantics";
+import {
   GroundedAnswerOutputSchema,
   GroundedFactInputSchema,
 } from "../../domain/grounded-answer";
@@ -69,7 +74,10 @@ export const SequenceAnalysisOutputSchema = z
             field: z.enum([
               "activity",
               "object",
+              "people_group",
               "environment",
+              "moment",
+              "detail",
               "visible_text",
               "visual_change",
             ]),
@@ -77,12 +85,14 @@ export const SequenceAnalysisOutputSchema = z
             confidenceBand: z.enum(["low", "medium", "high"]),
             uncertainty: z.string().trim().max(300).nullable(),
           })
-          .strict(),
+          .strict()
+          .refine(
+            ({ confidenceBand, uncertainty }) =>
+              confidenceBand !== "low" || uncertainty !== null,
+            { message: "Low-confidence observations require uncertainty." },
+          ),
       )
       .max(50),
-    titleCandidate: z.string().trim().min(1).max(120),
-    summaryCandidate: z.string().trim().min(1).max(800),
-    activityCandidates: z.array(SafeTextSchema).max(8),
   })
   .strict();
 
@@ -316,38 +326,26 @@ export function assertSequenceAnalysisReferences(
   }
 }
 
-export function canonicalizeSequenceAnalysis(
+export function toAssetSemanticRepresentations(
   output: SequenceAnalysisOutput,
-): SequenceAnalysisOutput {
-  const groundedObservations = output.observations.filter(
-    ({ confidenceBand, field }) =>
-      confidenceBand !== "low" && field !== "visible_text",
+): AssetSemanticRepresentation[] {
+  const byAsset = new Map<string, AssetSemanticRepresentation["facets"]>();
+  for (const observation of output.observations) {
+    const type: EventFacetType =
+      observation.field === "visual_change" ? "moment" : observation.field;
+    byAsset.set(observation.assetId, [
+      ...(byAsset.get(observation.assetId) ?? []),
+      {
+        type,
+        value: observation.value,
+        confidenceBand: observation.confidenceBand,
+        uncertainty: observation.uncertainty,
+      },
+    ]);
+  }
+  return normalizeAssetSemanticRepresentations(
+    [...byAsset].map(([assetId, facets]) => ({ assetId, facets })),
   );
-  const uniqueValues = groundedObservations
-    .map(({ value }) => value.replace(/\s+/gu, " ").trim())
-    .filter(
-      (value, index, values) =>
-        value.length > 0 && values.indexOf(value) === index,
-    );
-  const titleObservation =
-    groundedObservations.find(({ field }) => field === "activity") ??
-    groundedObservations.find(({ field }) => field === "environment") ??
-    groundedObservations.find(({ field }) => field === "object");
-
-  return {
-    ...output,
-    titleCandidate:
-      titleObservation === undefined
-        ? "内容を確認中の記憶"
-        : titleObservation.value.replace(/\s+/gu, " ").trim().slice(0, 120),
-    summaryCandidate:
-      uniqueValues.length === 0
-        ? "写真から確実に説明できる内容がまだありません。"
-        : `写真から確認できる内容：${uniqueValues.slice(0, 3).join("、")}`.slice(
-            0,
-            800,
-          ),
-  };
 }
 
 export function assertPrivacySafeSequenceInput(
