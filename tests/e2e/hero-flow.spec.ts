@@ -36,7 +36,7 @@ interface HeroApiObservations {
     manifest: string;
     timezoneOffsetMinutes: number;
     timezone: string;
-    coarsePlace: string | null;
+    placeCandidateId: string | null;
   } | null;
 }
 
@@ -99,6 +99,24 @@ async function installHeroApi(page: Page): Promise<HeroApiObservations> {
         })),
       });
     }
+    if (url.pathname === "/api/places/search" && request.method() === "GET") {
+      return json(route, {
+        candidates: [
+          {
+            id: "nominatim:N101",
+            name: "神山中学校",
+            area: "徳島県 神山町",
+            category: "学校",
+          },
+          {
+            id: "nominatim:N102",
+            name: "神山中学校",
+            area: "香川県 高松市",
+            category: "学校",
+          },
+        ],
+      });
+    }
     if (
       url.pathname === "/api/upload/complete" &&
       request.method() === "POST"
@@ -116,6 +134,7 @@ async function installHeroApi(page: Page): Promise<HeroApiObservations> {
         rejected: [],
         sequenceIds: ["sequence-1"],
         processingState: "processing",
+        placeStatus: "selected",
         message: "写真と確定的なEvidenceを保存しました。",
       });
     }
@@ -275,7 +294,13 @@ test("10 photos become a clarifiable, corrected and grounded memory", async ({
     })),
   );
   await expect(page.getByText("選択中の写真")).toBeVisible();
-  await page.getByLabel("おおまかな場所（任意）").fill("神山");
+  await page.getByLabel("場所を追加（任意）").fill("神山中学校");
+  await expect(page.getByRole("option")).toHaveCount(2);
+  await page
+    .getByRole("option", { name: /徳島県 神山町/u })
+    .getByRole("button")
+    .click();
+  await expect(page.getByText(/神山中学校を選択中/u)).toBeVisible();
   await page.getByRole("button", { name: "写真を安全に追加" }).click();
   await expect(page.getByText("受付 10件")).toBeVisible();
   await expect(page.getByText("選択中の写真")).toHaveCount(0);
@@ -301,7 +326,7 @@ test("10 photos become a clarifiable, corrected and grounded memory", async ({
   );
   expect(observations.completion).toMatchObject({
     manifest: "hero-upload-manifest",
-    coarsePlace: "神山",
+    placeCandidateId: "nominatim:N101",
   });
   expect(observations.completion?.timezoneOffsetMinutes).toEqual(
     expect.any(Number),

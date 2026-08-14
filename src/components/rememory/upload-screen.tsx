@@ -15,7 +15,8 @@ import { apiRequest, ApiError } from "./api-client";
 import { AppShell } from "./app-shell";
 import { uploadPhotoToSignedSlot } from "./direct-photo-upload";
 import { InlineNotice } from "./state-view";
-import type { UploadPayload } from "./types";
+import type { PlaceCandidate, UploadPayload } from "./types";
+import { PlacePicker } from "./place-picker";
 import { useConnectivity } from "./use-api-resource";
 
 const supportedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -59,7 +60,9 @@ export function UploadScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<UploadPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [coarsePlace, setCoarsePlace] = useState("");
+  const [selectedPlace, setSelectedPlace] = useState<PlaceCandidate | null>(
+    null,
+  );
   const [uploadProgress, setUploadProgress] = useState<{
     completed: number;
     total: number;
@@ -171,7 +174,7 @@ export function UploadScreen() {
           timezoneOffsetMinutes: new Date().getTimezoneOffset(),
           timezone:
             Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown",
-          coarsePlace: coarsePlace.trim() || null,
+          placeCandidateId: selectedPlace?.id ?? null,
         }),
       });
       setResult(payload);
@@ -179,7 +182,7 @@ export function UploadScreen() {
         setFiles((current) =>
           removeAcceptedFiles(current, payload, localKeyBySlot),
         );
-        setCoarsePlace("");
+        setSelectedPlace(null);
       }
     } catch (caught) {
       setError(
@@ -301,23 +304,7 @@ export function UploadScreen() {
             </section>
           ) : null}
 
-          <div className="upload-place-field">
-            <label htmlFor="coarse-place">おおまかな場所（任意）</label>
-            <input
-              className="text-input"
-              id="coarse-place"
-              name="coarsePlace"
-              type="text"
-              maxLength={80}
-              value={coarsePlace}
-              onChange={(event) => setCoarsePlace(event.target.value)}
-              placeholder="例: 神山"
-              aria-describedby="coarse-place-hint"
-            />
-            <p className="field-hint" id="coarse-place-hint">
-              市区町村など粗い名前だけを入力してください。今回の写真すべての場所として保存します。
-            </p>
-          </div>
+          <PlacePicker disabled={submitting} onChange={setSelectedPlace} />
 
           <div className="privacy-note">
             <ShieldCheck aria-hidden="true" size={22} />
@@ -353,6 +340,11 @@ export function UploadScreen() {
                     : ""}
                 </span>
                 {result.message ? <span>{result.message}</span> : null}
+                {result.placeStatus === "unavailable" ? (
+                  <span>
+                    場所候補を再確認できなかったため、写真は場所未設定で保存しました。
+                  </span>
+                ) : null}
                 {result.rejected.length > 0 ? (
                   <ul>
                     {result.rejected.map((item) => (

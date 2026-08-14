@@ -133,6 +133,18 @@ export interface UploadPayload {
   sequenceIds?: string[];
   processingState: ProcessingState;
   message?: string | null;
+  placeStatus?: "selected" | "not_selected" | "unavailable";
+}
+
+export interface PlaceCandidate {
+  id: string;
+  name: string;
+  area: string | null;
+  category: string | null;
+}
+
+export interface PlaceSearchPayload {
+  candidates: PlaceCandidate[];
 }
 
 export interface PrivacyAiSettings {

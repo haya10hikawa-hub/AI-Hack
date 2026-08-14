@@ -14,6 +14,7 @@ import {
 } from "@/src/server/services/analysis-jobs";
 import { ingestUpload } from "@/src/server/services/upload";
 import { resolveCoarseLocationLabel } from "@/src/server/services/reverse-geocode";
+import { createPlaceProviderFromEnv } from "@/src/server/places/provider";
 import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
@@ -57,7 +58,10 @@ export async function POST(request: NextRequest) {
     const timezoneOffsetMinutes = parseTimezoneOffset(
       form.get("timezoneOffsetMinutes"),
     );
-    const coarsePlace = parseCoarsePlace(form.get("coarsePlace"));
+    const placeCandidateId = parsePlaceCandidateId(
+      form.get("placeCandidateId"),
+    );
+    const selectedPlace = await resolveOptionalPlace(placeCandidateId);
     const result = await ingestUpload({
       client: database,
       userId: user.id,
@@ -67,7 +71,8 @@ export async function POST(request: NextRequest) {
       })),
       config,
       timezoneOffsetMinutes,
-      coarsePlace,
+      coarsePlace: selectedPlace?.displayName ?? null,
+      selectedPlace,
       resolveCoarseLocation: (location) =>
         resolveCoarseLocationLabel({ database, location }),
     });
@@ -96,6 +101,12 @@ export async function POST(request: NextRequest) {
       sequenceIds: result.sequenceIds,
       processingState: result.processingState,
       message: result.message,
+      placeStatus:
+        placeCandidateId === null
+          ? "not_selected"
+          : selectedPlace === null
+            ? "unavailable"
+            : "selected",
     });
   } catch (error) {
     return routeError(error, id);
@@ -110,13 +121,20 @@ function parseTimezoneOffset(value: FormDataEntryValue | null): number | null {
     : null;
 }
 
-function parseCoarsePlace(value: FormDataEntryValue | null): string | null {
+function parsePlaceCandidateId(
+  value: FormDataEntryValue | null,
+): string | null {
   if (typeof value !== "string") return null;
-  const normalized = value.normalize("NFKC").trim().replace(/\s+/gu, " ");
+  const normalized = value.trim();
   if (normalized.length === 0) return null;
-  return z
-    .string()
-    .max(80)
-    .refine((text) => !/[<>\u0000-\u001f\u007f]/u.test(text))
-    .parse(normalized);
+  return z.string().min(3).max(220).parse(normalized);
+}
+
+async function resolveOptionalPlace(candidateId: string | null) {
+  if (candidateId === null) return null;
+  try {
+    return await createPlaceProviderFromEnv().resolve(candidateId);
+  } catch {
+    return null;
+  }
 }

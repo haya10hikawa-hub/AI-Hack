@@ -21,6 +21,7 @@ import {
 } from "@/src/server/services/upload-staging";
 import { ingestUpload } from "@/src/server/services/upload";
 import { resolveCoarseLocationLabel } from "@/src/server/services/reverse-geocode";
+import { createPlaceProviderFromEnv } from "@/src/server/places/provider";
 import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
@@ -30,6 +31,7 @@ const CompleteUploadSchema = z
     timezoneOffsetMinutes: z.number().int().min(-840).max(840).nullable(),
     timezone: z.string().max(100).optional(),
     coarsePlace: z.string().max(80).nullable().optional(),
+    placeCandidateId: z.string().min(3).max(220).nullable().optional(),
   })
   .strict();
 
@@ -69,6 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const database = createSupabaseAdminClient();
+    const selectedPlace = await resolveOptionalPlace(input.placeCandidateId);
     const bucket = database.storage.from("rememory-private");
     const stagedFiles = manifest.files;
     const sources = stagedFiles.map((staged) => ({
@@ -96,7 +99,8 @@ export async function POST(request: NextRequest) {
       files: sources,
       config,
       timezoneOffsetMinutes: input.timezoneOffsetMinutes,
-      coarsePlace: normalizeCoarsePlace(input.coarsePlace),
+      coarsePlace: selectedPlace?.displayName ?? null,
+      selectedPlace,
       resolveCoarseLocation: (location) =>
         resolveCoarseLocationLabel({ database, location }),
     });
@@ -128,19 +132,25 @@ export async function POST(request: NextRequest) {
       sequenceIds: result.sequenceIds,
       processingState: result.processingState,
       message: result.message,
+      placeStatus:
+        input.placeCandidateId == null
+          ? "not_selected"
+          : selectedPlace === null
+            ? "unavailable"
+            : "selected",
     });
   } catch (error) {
     return routeError(error, id);
   }
 }
 
-function normalizeCoarsePlace(value: string | null | undefined): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.normalize("NFKC").trim().replace(/\s+/gu, " ");
-  if (normalized.length === 0) return null;
-  return z
-    .string()
-    .max(80)
-    .refine((text) => !/[<>\u0000-\u001f\u007f]/u.test(text))
-    .parse(normalized);
+async function resolveOptionalPlace(candidateId: string | null | undefined) {
+  if (!candidateId) return null;
+  try {
+    return await createPlaceProviderFromEnv().resolve(candidateId);
+  } catch {
+    // Place enrichment is optional. Provider failure or a forged candidate ID
+    // must never discard an otherwise valid photo upload.
+    return null;
+  }
 }
