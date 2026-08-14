@@ -28,9 +28,9 @@ pnpm dlx supabase@latest db push
 ```
 
 Confirm that the private `rememory-private` bucket exists and that migrations
-`202608130001`, `202608140002`, `202608140003`, and `202608140004` are present.
-The browser is read-only for provenance data; server routes require
-`SUPABASE_SECRET_KEY`.
+`202608130001`, `202608140002`, `202608140003`, `202608140004`,
+`202608140005`, and `202608140006` are present. The browser is read-only for
+provenance data; server routes require `SUPABASE_SECRET_KEY`.
 
 ## 3. Auth URLs
 
