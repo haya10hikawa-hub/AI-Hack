@@ -65,6 +65,8 @@ AI を未設定の環境では、架空データへフォールバックせず�
 ```bash
 pnpm verify
 pnpm test:e2e
+pnpm preflight:prod -- --env-file=.env.production
+pnpm preflight:prod -- --env-file=.env.production --check-models
 ```
 
 本番相当のSupabase・AI・Authを通す最終Hero smokeは、確認済みの専用テスト
@@ -86,7 +88,9 @@ analysisの実測時間をJSONで出力します。専用アカウントを使�
 含める画像の外部AI利用に同意できる場合だけ実行してください。
 
 主要コマンドと必要な環境変数は [`package.json`](./package.json) と
-[`.env.example`](./.env.example) を参照してください。
+[`.env.example`](./.env.example) を参照してください。提出前のP0順序は
+[`TODAY_SHIP_CHECKLIST.md`](./docs/TODAY_SHIP_CHECKLIST.md)、本番運用手順は
+[`PRODUCTION_RUNBOOK.md`](./docs/PRODUCTION_RUNBOOK.md) にまとめています。
 
 ---
 

@@ -20,6 +20,7 @@
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
     "test:live:hero": "node scripts/live-hero-smoke.mjs",
+    "preflight:prod": "node scripts/production-preflight.mjs",
     "demo:map:seed": "node scripts/seed-memory-map-demo.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

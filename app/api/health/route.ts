@@ -13,6 +13,7 @@ export async function GET() {
     process.env.AI_MODEL_VISION_CHEAP,
     process.env.AI_MODEL_EVENT_CHEAP,
     process.env.AI_MODEL_CHAT_CHEAP,
+    process.env.AI_MODEL_EVENT_STRONG,
   ].every((value) => typeof value === "string" && value.length > 0);
   let databaseReady = false;
   try {
