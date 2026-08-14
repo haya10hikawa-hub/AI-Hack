@@ -1,5 +1,28 @@
 # Memory Exploration Map — Demo Readiness Plan
 
+## 2026-08-14 P0 implementation pass
+
+Application-side P0 implementation is complete on `codex/memory-exploration-map-mvp`:
+
+- 520ms success-only Fog Reveal with delayed Memory node and reduced-motion fallback
+- 390px single-column Hero and 1440px Map 2/3 + Detail 1/3 composition
+- 22px Memory node, non-color state hierarchy, selected ring / scale / depth
+- owner-scoped, resolution-validated Cell → Recall candidate filtering
+- distinct denied / unavailable / timeout handling with saved-Map fallback
+- local-only deterministic seed command with Passed ×1、Experienced ×1、Memory ×2 and two evidence-linked Memories
+
+Quality gates passed with 108 Vitest tests and 26 Playwright tests. The local demo seed, migration reset, and pgTAP remain unexecuted because OrbStack/Docker is not running on the validation machine. Do not mark the recording environment DEMO READY until the commands below pass locally.
+
+```bash
+pnpm dlx supabase@latest start
+pnpm dlx supabase@latest db reset
+pnpm dlx supabase@latest test db
+pnpm demo:map:seed
+pnpm dev
+```
+
+The fixed local recording login is printed by `pnpm demo:map:seed`. Re-running the seed command deletes and recreates only that local demo account.
+
 ## 目的と判定
 
 この文書は、Memory Exploration Mapを「実装提案」から「AI HACK 2026の3分デモ動画で、30〜40秒のHero Flowとして安定して見せられる状態」へ引き上げるための改善計画である。アプリコードの変更はこの文書の対象外とし、現在のコードをSource of Truthとして評価する。
