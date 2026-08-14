@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { type ReactNode } from "react";
 import { Home, ImagePlus, Map, Search, Settings } from "lucide-react";
 
 import { Brand } from "./brand";
-import { apiRequest, ApiError } from "./api-client";
 import { useConnectivity } from "./use-api-resource";
 
 const destinations = [
@@ -25,24 +24,7 @@ function isCurrent(pathname: string, href: string): boolean {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const online = useConnectivity();
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void apiRequest("/api/auth/me", { signal: controller.signal }).catch(
-      (caught: unknown) => {
-        if (
-          !controller.signal.aborted &&
-          caught instanceof ApiError &&
-          caught.status === 401
-        ) {
-          router.replace("/auth/login");
-        }
-      },
-    );
-    return () => controller.abort();
-  }, [router]);
 
   return (
     <div className="app-shell">

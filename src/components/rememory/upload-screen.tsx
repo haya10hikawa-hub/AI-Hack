@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 
-import { apiRequest } from "./api-client";
+import { apiRequest, ApiError } from "./api-client";
 import { AppShell } from "./app-shell";
 import { InlineNotice } from "./state-view";
 import type { UploadPayload } from "./types";
@@ -120,7 +120,9 @@ export function UploadScreen() {
       }
     } catch (caught) {
       setError(
-        caught instanceof Error
+        caught instanceof ApiError && caught.status === 401
+          ? "公開プレビューでは写真を保存できません。アカウントを作成すると、自分のMemoryを作れます。"
+          : caught instanceof Error
           ? caught.message
           : "アップロードを完了できませんでした。",
       );

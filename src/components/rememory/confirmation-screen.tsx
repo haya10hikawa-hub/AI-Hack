@@ -80,6 +80,7 @@ export function ConfirmationScreen() {
   const partialMessage = !Array.isArray(resource.data)
     ? resource.data?.partialMessage
     : null;
+  const unauthenticated = resource.error?.status === 401;
 
   return (
     <AppShell>
@@ -135,7 +136,7 @@ export function ConfirmationScreen() {
             title="確認できるMemoryを探しています"
             description="Evidenceと不足している文脈を照合しています。"
           />
-        ) : resource.error ? (
+        ) : resource.error && !unauthenticated ? (
           <StateView
             kind={resource.error.code === "NETWORK_ERROR" ? "offline" : "error"}
             title="確認事項を読み込めませんでした"
@@ -271,8 +272,16 @@ export function ConfirmationScreen() {
         ) : (
           <StateView
             kind="empty"
-            title="いま確認が必要なMemoryはありません"
-            description="分からないことを無理に質問せず、役に立つ候補が十分に絞れたときだけここに表示します。"
+            title={
+              unauthenticated
+                ? "公開プレビューでは確認待ちはありません"
+                : "いま確認が必要なMemoryはありません"
+            }
+            description={
+              unauthenticated
+                ? "ログインなしで画面を確認できます。写真を保存すると、AIが質問すべき候補だけをここに表示します。"
+                : "分からないことを無理に質問せず、役に立つ候補が十分に絞れたときだけここに表示します。"
+            }
             action={
               <Link className="button button--secondary" href="/home">
                 Memory Threadへ戻る

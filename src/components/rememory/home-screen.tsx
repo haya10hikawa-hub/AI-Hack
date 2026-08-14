@@ -47,6 +47,7 @@ export function HomeScreen() {
     data?.memories.some(
       ({ processingState }) => processingState === "failed",
     ) ?? false;
+  const unauthenticated = resource.error?.status === 401;
 
   const retryFailedAnalysis = async () => {
     setRetrying(true);
@@ -170,7 +171,7 @@ export function HomeScreen() {
             title="Memoryを読み込んでいます"
             description="保存済みの写真と確認状態を安全に取得しています。"
           />
-        ) : resource.error ? (
+        ) : resource.error && !unauthenticated ? (
           <StateView
             kind={resource.error.code === "NETWORK_ERROR" ? "offline" : "error"}
             title="Memoryを読み込めませんでした"
@@ -190,12 +191,23 @@ export function HomeScreen() {
         ) : (
           <StateView
             kind="empty"
-            title="最初のMemoryをつくりましょう"
-            description="写真を追加すると、日時など確かな情報から出来事のまとまりをつくります。AIが分からないことは、未確認のまま残します。"
+            title={
+              unauthenticated
+                ? "公開プレビューを表示しています"
+                : "最初のMemoryをつくりましょう"
+            }
+            description={
+              unauthenticated
+                ? "ログインなしで画面を確認できます。写真の保存や個人Memoryの作成は、アカウント作成後に使えます。"
+                : "写真を追加すると、日時など確かな情報から出来事のまとまりをつくります。AIが分からないことは、未確認のまま残します。"
+            }
             action={
-              <Link className="button button--primary" href="/add">
+              <Link
+                className="button button--primary"
+                href={unauthenticated ? "/auth/sign-up" : "/add"}
+              >
                 <ImagePlus aria-hidden="true" size={19} />
-                写真を選ぶ
+                {unauthenticated ? "アカウントを作成" : "写真を選ぶ"}
               </Link>
             }
           />

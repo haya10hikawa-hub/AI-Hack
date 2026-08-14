@@ -9,11 +9,11 @@ export function LandingPage() {
       <header className="landing-header">
         <Brand />
         <nav aria-label="アカウント">
-          <Link className="button button--quiet" href="/auth/login">
-            ログイン
+          <Link className="button button--quiet" href="#how-it-works">
+            仕組み
           </Link>
-          <Link className="button button--primary" href="/auth/sign-up">
-            はじめる
+          <Link className="button button--primary" href="/home">
+            公開プレビュー
           </Link>
         </nav>
       </header>
@@ -30,8 +30,8 @@ export function LandingPage() {
             写真に残った確かな手がかりと、あなた自身の確認からMemoryをつくる。AIが分からないことは、分からないまま丁寧に残します。
           </p>
           <div className="landing-hero__actions">
-            <Link className="button button--primary" href="/auth/sign-up">
-              自分のMemoryをはじめる
+            <Link className="button button--primary" href="/home">
+              Memory Threadを見る
               <ArrowRight aria-hidden="true" size={19} />
             </Link>
             <Link className="text-link" href="#how-it-works">
@@ -137,8 +137,8 @@ export function LandingPage() {
       <footer className="landing-footer">
         <Brand compact />
         <p>写真と確かな根拠から、あとで辿れる記憶へ。</p>
-        <Link className="button button--secondary" href="/auth/sign-up">
-          Re:Memoryをはじめる
+        <Link className="button button--secondary" href="/home">
+          公開プレビューへ
         </Link>
       </footer>
     </main>

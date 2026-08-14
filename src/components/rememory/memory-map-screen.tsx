@@ -126,6 +126,7 @@ export function MemoryMapScreen() {
     data?.cells.find((cell) => cell.cellId === selectedCellId) ??
     data?.cells[0] ??
     null;
+  const unauthenticated = resource.error?.status === 401;
 
   useEffect(() => {
     if (
@@ -274,7 +275,7 @@ export function MemoryMapScreen() {
             title="記憶の地図を読み込んでいます"
             description="保存された地域セルとMemoryの関係を確認しています。"
           />
-        ) : resource.error ? (
+        ) : resource.error && !unauthenticated ? (
           <StateView
             kind={resource.error.code === "NETWORK_ERROR" ? "offline" : "error"}
             title="地図を読み込めませんでした"
@@ -286,6 +287,17 @@ export function MemoryMapScreen() {
               >
                 もう一度読み込む
               </button>
+            }
+          />
+        ) : unauthenticated ? (
+          <StateView
+            kind="empty"
+            title="公開プレビューでは地図はまだ空です"
+            description="ログインなしで画面を確認できます。アカウント作成後、写真の場所Evidenceや現在地の同意からMemory Mapが開きます。"
+            action={
+              <Link className="button button--primary" href="/auth/sign-up">
+                アカウントを作成
+              </Link>
             }
           />
         ) : data ? (

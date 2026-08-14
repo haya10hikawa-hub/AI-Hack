@@ -95,6 +95,7 @@ export function PrivacyAiScreen() {
   const [clearingMap, setClearingMap] = useState(false);
 
   const settings = savedOverride ?? resource.data;
+  const unauthenticated = resource.error?.status === 401;
 
   const updateSetting = async (key: BooleanSetting, value: boolean) => {
     if (!settings) return;
@@ -248,7 +249,7 @@ export function PrivacyAiScreen() {
             title="プライバシー設定を読み込んでいます"
             description="現在の選択を安全に取得しています。"
           />
-        ) : resource.error ? (
+        ) : resource.error && !unauthenticated ? (
           <StateView
             kind={resource.error.code === "NETWORK_ERROR" ? "offline" : "error"}
             title="設定を読み込めませんでした"
@@ -261,6 +262,17 @@ export function PrivacyAiScreen() {
               >
                 もう一度読み込む
               </button>
+            }
+          />
+        ) : unauthenticated ? (
+          <StateView
+            kind="empty"
+            title="公開プレビューでは個人設定は保存されません"
+            description="ログインなしで画面を確認できます。アカウント作成後、写真・AI・地図・検索学習の設定を自分用に保存できます。"
+            action={
+              <Link className="button button--primary" href="/auth/sign-up">
+                アカウントを作成
+              </Link>
             }
           />
         ) : settings ? (

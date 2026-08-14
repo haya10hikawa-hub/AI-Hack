@@ -12,7 +12,7 @@ import {
   ThumbsUp,
 } from "lucide-react";
 
-import { apiRequest, jsonBody } from "./api-client";
+import { apiRequest, ApiError, jsonBody } from "./api-client";
 import { AppShell } from "./app-shell";
 import { InlineNotice, StateView } from "./state-view";
 import type {
@@ -158,7 +158,9 @@ export function SearchScreen() {
       });
     } catch (caught) {
       setError(
-        caught instanceof Error
+        caught instanceof ApiError && caught.status === 401
+          ? "公開プレビューでは個人Memory検索は使えません。アカウント作成後、保存した写真から検索できます。"
+          : caught instanceof Error
           ? caught.message
           : "検索を完了できませんでした。",
       );
