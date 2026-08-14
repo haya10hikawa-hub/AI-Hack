@@ -159,10 +159,10 @@ export function SearchScreen() {
     } catch (caught) {
       setError(
         caught instanceof ApiError && caught.status === 401
-          ? "公開プレビューでは個人Memory検索は使えません。アカウント作成後、保存した写真から検索できます。"
+          ? "公開セッションを確認できませんでした。ページを再読み込みしてから、もう一度お試しください。"
           : caught instanceof Error
-          ? caught.message
-          : "検索を完了できませんでした。",
+            ? caught.message
+            : "検索を完了できませんでした。",
       );
     } finally {
       setSubmitting(false);

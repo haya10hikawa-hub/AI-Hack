@@ -293,10 +293,10 @@ export function MemoryMapScreen() {
           <StateView
             kind="empty"
             title="公開プレビューでは地図はまだ空です"
-            description="ログインなしで画面を確認できます。アカウント作成後、写真の場所Evidenceや現在地の同意からMemory Mapが開きます。"
+            description="ログインなしで使えます。写真の場所Evidenceや現在地の同意からMemory Mapが開きます。"
             action={
-              <Link className="button button--primary" href="/auth/sign-up">
-                アカウントを作成
+              <Link className="button button--primary" href="/home">
+                Memory Threadへ戻る
               </Link>
             }
           />

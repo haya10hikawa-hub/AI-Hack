@@ -8,7 +8,6 @@ import {
   Clock3,
   Download,
   Image as ImageIcon,
-  KeyRound,
   LoaderCircle,
   LogOut,
   MapPin,
@@ -17,7 +16,6 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
-import Link from "next/link";
 
 import { apiRequest, jsonBody } from "./api-client";
 import { AppShell } from "./app-shell";
@@ -129,7 +127,7 @@ export function PrivacyAiScreen() {
     setMessage(null);
     try {
       await apiRequest("/api/auth/sign-out", { method: "POST" });
-      router.replace("/auth/login");
+      router.replace("/home");
       router.refresh();
     } catch (caught) {
       setMessage({
@@ -137,7 +135,7 @@ export function PrivacyAiScreen() {
         text:
           caught instanceof Error
             ? caught.message
-            : "ログアウトできませんでした。",
+            : "公開セッションをリセットできませんでした。",
       });
       setSigningOut(false);
     }
@@ -267,12 +265,16 @@ export function PrivacyAiScreen() {
         ) : unauthenticated ? (
           <StateView
             kind="empty"
-            title="公開プレビューでは個人設定は保存されません"
-            description="ログインなしで画面を確認できます。アカウント作成後、写真・AI・地図・検索学習の設定を自分用に保存できます。"
+            title="公開セッションを準備しています"
+            description="ログインなしで使えます。準備後、写真・AI・地図・検索学習の設定をこのブラウザ用に保存できます。"
             action={
-              <Link className="button button--primary" href="/auth/sign-up">
-                アカウントを作成
-              </Link>
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={resource.reload}
+              >
+                もう一度読み込む
+              </button>
             }
           />
         ) : settings ? (
@@ -419,20 +421,13 @@ export function PrivacyAiScreen() {
               aria-labelledby="account-actions-title"
             >
               <div className="account-actions__intro">
-                <p className="eyebrow">Account</p>
-                <h2 id="account-actions-title">アカウント</h2>
+                <p className="eyebrow">Session</p>
+                <h2 id="account-actions-title">公開セッション</h2>
                 <p>
-                  パスワード、データの持ち出し、完全削除をここから管理できます。
+                  このブラウザに保存されたMemoryデータの持ち出し、リセット、完全削除をここから管理できます。
                 </p>
               </div>
               <div className="account-action-grid">
-                <Link
-                  className="button button--secondary"
-                  href="/auth/reset-password"
-                >
-                  <KeyRound aria-hidden="true" size={18} />
-                  パスワードを変更
-                </Link>
                 <button
                   className="button button--secondary"
                   type="button"
@@ -465,12 +460,12 @@ export function PrivacyAiScreen() {
                   ) : (
                     <LogOut aria-hidden="true" size={18} />
                   )}
-                  {signingOut ? "ログアウト中…" : "ログアウト"}
+                  {signingOut ? "リセット中…" : "公開セッションをリセット"}
                 </button>
               </div>
               <div className="danger-zone">
                 <div>
-                  <strong>アカウントを完全に削除</strong>
+                  <strong>公開セッションのデータを完全に削除</strong>
                   <p>
                     すべてのMemory、Evidence、元画像を削除します。元に戻せません。
                   </p>

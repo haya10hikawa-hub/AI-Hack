@@ -1,9 +1,5 @@
-import type { Metadata } from "next";
-
-import { AuthForm } from "@/src/components/rememory/auth-form";
-
-export const metadata: Metadata = { title: "アカウントを作成" };
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <AuthForm mode="sign-up" />;
+  redirect("/home");
 }

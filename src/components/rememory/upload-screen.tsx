@@ -121,10 +121,10 @@ export function UploadScreen() {
     } catch (caught) {
       setError(
         caught instanceof ApiError && caught.status === 401
-          ? "公開プレビューでは写真を保存できません。アカウントを作成すると、自分のMemoryを作れます。"
+          ? "公開セッションを確認できませんでした。ページを再読み込みしてから、もう一度お試しください。"
           : caught instanceof Error
-          ? caught.message
-          : "アップロードを完了できませんでした。",
+            ? caught.message
+            : "アップロードを完了できませんでした。",
       );
     } finally {
       setSubmitting(false);

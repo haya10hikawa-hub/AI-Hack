@@ -198,16 +198,13 @@ export function HomeScreen() {
             }
             description={
               unauthenticated
-                ? "ログインなしで画面を確認できます。写真の保存や個人Memoryの作成は、アカウント作成後に使えます。"
+                ? "ログインなしで使える公開セッションを準備しています。準備後、そのまま写真を保存できます。"
                 : "写真を追加すると、日時など確かな情報から出来事のまとまりをつくります。AIが分からないことは、未確認のまま残します。"
             }
             action={
-              <Link
-                className="button button--primary"
-                href={unauthenticated ? "/auth/sign-up" : "/add"}
-              >
+              <Link className="button button--primary" href="/add">
                 <ImagePlus aria-hidden="true" size={19} />
-                {unauthenticated ? "アカウントを作成" : "写真を選ぶ"}
+                写真を選ぶ
               </Link>
             }
           />

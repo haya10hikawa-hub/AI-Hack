@@ -38,7 +38,12 @@ export function errorResponse(
 
 export function routeError(error: unknown, id?: string) {
   if (error instanceof AuthenticationError) {
-    return errorResponse(401, "AUTH_REQUIRED", "ログインが必要です。", id);
+    return errorResponse(
+      401,
+      "AUTH_REQUIRED",
+      "公開セッションを開始できませんでした。",
+      id,
+    );
   }
   if (error instanceof RequestSecurityError) {
     return errorResponse(

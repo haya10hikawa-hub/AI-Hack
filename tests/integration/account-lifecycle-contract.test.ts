@@ -10,11 +10,21 @@ function source(relativePath: string): string {
 }
 
 describe("account lifecycle route contract", () => {
-  it("supports recovery without revealing whether an email exists", () => {
+  it("keeps legacy email authentication endpoints disabled", () => {
+    const signIn = source("app/api/auth/sign-in/route.ts");
+    const signUp = source("app/api/auth/sign-up/route.ts");
     const reset = source("app/api/auth/password-reset/route.ts");
-    expect(reset).toContain("resetPasswordForEmail");
-    expect(reset).toContain("/auth/confirm?next=/auth/update-password");
-    expect(reset).not.toContain("USER_NOT_FOUND");
+    const update = source("app/api/auth/update-password/route.ts");
+    const resend = source("app/api/auth/resend-confirmation/route.ts");
+
+    for (const route of [signIn, signUp, reset, update, resend]) {
+      expect(route).toContain("AUTH_DISABLED");
+    }
+    expect(signIn).not.toContain("signInWithPassword");
+    expect(signUp).not.toContain("signUp(");
+    expect(reset).not.toContain("resetPasswordForEmail");
+    expect(update).not.toContain("updateUser");
+    expect(resend).not.toContain("auth.resend");
   });
 
   it("exports owner-scoped records and short-lived media links", () => {
@@ -32,5 +42,17 @@ describe("account lifecycle route contract", () => {
       route.indexOf('.from("rememory-private")'),
     );
     expect(route).toContain('z.literal("削除")');
+  });
+
+  it("uses a signed public preview cookie instead of trusting a raw user id", () => {
+    const auth = source("src/server/supabase/auth.ts");
+    expect(auth).toContain("createHmac");
+    expect(auth).toContain("timingSafeEqual");
+    expect(auth).toContain("serializePreviewCookie");
+    expect(auth).toContain("parsePreviewCookie");
+    expect(auth).toContain("rememory_public_preview_user");
+    expect(auth).not.toContain(
+      "const existingId = cookieStore.get(PUBLIC_PREVIEW_COOKIE)?.value;",
+    );
   });
 });

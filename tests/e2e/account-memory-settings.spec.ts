@@ -18,14 +18,9 @@ async function mockAuthenticatedUser(page: Page) {
   );
 }
 
-test("login submits the API contract and opens the empty Memory Thread", async ({
+test("legacy auth pages redirect into the accountless Memory Thread", async ({
   page,
 }) => {
-  let submitted: unknown = null;
-  await page.route("**/api/auth/sign-in", async (route) => {
-    submitted = route.request().postDataJSON();
-    return json(route, { authenticated: true });
-  });
   await mockAuthenticatedUser(page);
   await page.route("**/api/memories?view=thread", (route) =>
     json(route, {
@@ -37,43 +32,22 @@ test("login submits the API contract and opens the empty Memory Thread", async (
   );
 
   await page.goto("/auth/login");
-  await page.getByLabel("メールアドレス").fill("hero@example.com");
-  await page.getByLabel("パスワード").fill("Password123!");
-  await page.getByRole("button", { name: "ログイン" }).click();
-
   await expect(page).toHaveURL(/\/home$/u);
   await expect(
     page.getByRole("heading", { name: "最初のMemoryをつくりましょう" }),
   ).toBeVisible();
-  expect(submitted).toEqual({
-    email: "hero@example.com",
-    password: "Password123!",
-  });
+
+  for (const path of [
+    "/auth/sign-up",
+    "/auth/reset-password",
+    "/auth/update-password",
+  ]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/home$/u);
+  }
 });
 
-test("password recovery sends a non-enumerating reset request", async ({
-  page,
-}) => {
-  let submitted: unknown = null;
-  await page.route("**/api/auth/password-reset", async (route) => {
-    submitted = route.request().postDataJSON();
-    return json(route, {
-      sent: true,
-      message:
-        "登録済みの場合は再設定メールを送信しました。メール内のリンクを開いてください。",
-    });
-  });
-
-  await page.goto("/auth/reset-password");
-  await page.getByLabel("メールアドレス").fill("hero@example.com");
-  await page.getByRole("button", { name: "再設定メールを送る" }).click();
-  await expect(
-    page.getByText("登録済みの場合は再設定メールを送信しました。"),
-  ).toBeVisible();
-  expect(submitted).toEqual({ email: "hero@example.com" });
-});
-
-test("privacy settings persist and sign-out returns to login", async ({
+test("privacy settings persist and public session reset returns home", async ({
   page,
 }) => {
   const settings = {
@@ -118,8 +92,8 @@ test("privacy settings persist and sign-out returns to login", async ({
   await expect(learningToggle).toHaveAttribute("aria-checked", "false");
   expect(patchBodies).toContainEqual({ searchLearning: false });
 
-  await page.getByRole("button", { name: "ログアウト" }).click();
-  await expect(page).toHaveURL(/\/auth\/login$/u);
+  await page.getByRole("button", { name: "公開セッションをリセット" }).click();
+  await expect(page).toHaveURL(/\/home$/u);
   expect(signedOut).toBe(true);
 });
 

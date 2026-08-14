@@ -79,7 +79,7 @@ export async function apiRequest<T>(
   if (!response.ok) {
     const fallback =
       response.status === 401
-        ? "ログインの有効期限が切れました。もう一度ログインしてください。"
+        ? "公開セッションを確認できませんでした。ページを再読み込みしてください。"
         : response.status === 429
           ? "処理が混み合っています。少し待ってから、もう一度お試しください。"
           : "処理を完了できませんでした。時間をおいて再度お試しください。";
