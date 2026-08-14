@@ -20,6 +20,7 @@ const analysisPipeline = routeSource(
   "src/server/services/analysis-pipeline.ts",
 );
 const search = routeSource("app/api/search/route.ts");
+const memoryMap = routeSource("app/api/map/route.ts");
 
 describe("API route implementation contracts", () => {
   it("confirms a gap through the gap-aware atomic RPC", () => {
@@ -134,5 +135,19 @@ describe("API route implementation contracts", () => {
     expect(search).toMatch(
       /sources:\s*grounded\.facts[\s\S]*?filter\(\(\{ claimId \}\) => citedIds\.has\(claimId\)\)[\s\S]*?kind:\s*fact\.provenance\.kind/u,
     );
+  });
+
+  it("accepts only privacy-safe Map cells and scopes every mutation to the session owner", () => {
+    expect(memoryMap).toMatch(/\.strict\(\)/u);
+    expect(memoryMap).toMatch(/refine\(isAllowedMemoryMapCell\)/u);
+    expect(memoryMap).toMatch(/assertSameOrigin\(request\)/u);
+    expect(memoryMap).toMatch(/requireAuthenticatedUser\(\)/u);
+    expect(memoryMap).toMatch(
+      /p_user_id:\s*user\.id,[\s\S]*?p_cell_id:\s*input\.cellId/u,
+    );
+    expect(memoryMap).toMatch(
+      /\.delete\(\)[\s\S]*?\.eq\("user_id", user\.id\)/u,
+    );
+    expect(memoryMap).not.toMatch(/input\.(?:latitude|longitude)/u);
   });
 });

@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   LogOut,
   MapPin,
+  Map,
   Search,
   ShieldCheck,
   Trash2,
@@ -91,6 +92,7 @@ export function PrivacyAiScreen() {
   const [exporting, setExporting] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [clearingMap, setClearingMap] = useState(false);
 
   const settings = savedOverride ?? resource.data;
 
@@ -195,6 +197,28 @@ export function PrivacyAiScreen() {
     }
   };
 
+  const clearMap = async () => {
+    setClearingMap(true);
+    setMessage(null);
+    try {
+      await apiRequest("/api/map", { method: "DELETE" });
+      setMessage({
+        tone: "sage",
+        text: "探索した地図を消去しました。Memoryは削除していません。",
+      });
+    } catch (caught) {
+      setMessage({
+        tone: "error",
+        text:
+          caught instanceof Error
+            ? caught.message
+            : "地図を消去できませんでした。",
+      });
+    } finally {
+      setClearingMap(false);
+    }
+  };
+
   return (
     <AppShell>
       <div className="page-shell page-shell--settings">
@@ -292,6 +316,31 @@ export function PrivacyAiScreen() {
                         ? "未選択"
                         : "利用できません"}
                 </strong>
+              </div>
+              <ToggleRow
+                id="memoryMap"
+                label="Memory Map"
+                description="アプリを開いている間だけ、端末内で現在地を粗い地域セルへ変換できます"
+                checked={settings.memoryMap}
+                disabled={savingKey !== null}
+                icon={Map}
+                onChange={updateSetting}
+              />
+              <div className="map-settings-action">
+                <div>
+                  <strong>探索した地図を消去</strong>
+                  <span>
+                    地図の地域セルだけを削除します。Memoryや写真は残ります。
+                  </span>
+                </div>
+                <button
+                  className="button button--quiet button--danger-text"
+                  type="button"
+                  disabled={clearingMap}
+                  onClick={() => void clearMap()}
+                >
+                  {clearingMap ? "消去中…" : "地図だけ消去"}
+                </button>
               </div>
               <ToggleRow
                 id="useCalendar"

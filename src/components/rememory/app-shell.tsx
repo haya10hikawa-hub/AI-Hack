@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
-import { Home, ImagePlus, Search, Settings } from "lucide-react";
+import { Home, ImagePlus, Map, Search, Settings } from "lucide-react";
 
 import { Brand } from "./brand";
 import { apiRequest, ApiError } from "./api-client";
@@ -13,6 +13,7 @@ const destinations = [
   { href: "/home", label: "ホーム", icon: Home },
   { href: "/search", label: "思い出す", icon: Search },
   { href: "/add", label: "追加", icon: ImagePlus },
+  { href: "/map", label: "地図", icon: Map },
   { href: "/settings/privacy-ai", label: "設定", icon: Settings },
 ];
 

@@ -140,6 +140,31 @@ export interface PrivacyAiSettings {
   useCalendar: boolean;
   usePersonalContext: boolean;
   searchLearning: boolean;
+  memoryMap: boolean;
   locationPermissionState?: "granted" | "denied" | "prompt" | "unavailable";
   calendarConnectionState?: "connected" | "not_connected" | "unavailable";
+}
+
+export interface MemoryMapCell {
+  cellId: string;
+  state: "passed" | "experienced" | "memory";
+  firstSeenAt: string;
+  lastSeenAt: string;
+  visitCount: number;
+  dwellBucket: "pass_through" | "short" | "medium" | "long" | null;
+  evidenceCount: number;
+  memoryCount: number;
+  coarsePlace: string | null;
+  memories: Array<{ id: string; title: string; updatedAt: string }>;
+}
+
+export interface MemoryMapPayload {
+  enabled: boolean;
+  cells: MemoryMapCell[];
+  coarseAreas: Array<{
+    coarsePlace: string;
+    memories: Array<{ id: string; title: string }>;
+  }>;
+  partial: boolean;
+  partialMessage: string | null;
 }
