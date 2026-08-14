@@ -20,7 +20,6 @@ const analysisPipeline = routeSource(
   "src/server/services/analysis-pipeline.ts",
 );
 const search = routeSource("app/api/search/route.ts");
-const health = routeSource("app/api/health/route.ts");
 const memoryMap = routeSource("app/api/map/route.ts");
 
 describe("API route implementation contracts", () => {
