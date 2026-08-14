@@ -1,0 +1,40 @@
+name: Format Legal Copy
+
+on:
+  pull_request:
+    paths:
+      - "docs/legal/ONBOARDING_COPY.md"
+      - ".github/workflows/format-legal-copy.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: pnpm/action-setup@v4.4.0
+        with:
+          version: 11.4.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write docs/legal/ONBOARDING_COPY.md
+      - name: Commit formatting if needed
+        shell: bash
+        run: |
+          if git diff --quiet -- docs/legal/ONBOARDING_COPY.md; then
+            echo "No formatting changes needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/legal/ONBOARDING_COPY.md
+          git commit -m "Format onboarding copy"
+          git push origin HEAD:${{ github.head_ref }}
