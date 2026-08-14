@@ -420,7 +420,7 @@ h3 {
 }
 
 .page-shell--map {
-  max-width: calc(68rem + (var(--gutter) * 2));
+  max-width: calc(80rem + (var(--gutter) * 2));
 }
 
 .map-intro h1 {
@@ -429,13 +429,12 @@ h3 {
 
 .map-privacy-gate {
   display: flex;
-  margin-bottom: 20px;
   padding: 18px;
   border: 1px solid var(--color-border);
   border-left: 3px solid var(--color-secondary);
   border-radius: var(--radius-md);
-  align-items: center;
-  justify-content: space-between;
+  align-items: stretch;
+  flex-direction: column;
   gap: 18px;
   background: var(--color-sage-soft);
 }
@@ -459,11 +458,36 @@ h3 {
 }
 
 .memory-map-stage {
-  margin-top: 24px;
   padding: clamp(18px, 4vw, 28px);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+}
+
+.map-hero-layout {
+  display: grid;
+  margin-top: 24px;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.map-hero-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.map-location-cta,
+.map-recall-cta {
+  width: 100%;
+  min-height: 48px;
+}
+
+.map-search-context {
+  margin: -8px 0 20px;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .map-stage-heading {
@@ -550,7 +574,7 @@ h3 {
 .fog-cell,
 .memory-map-blank span {
   position: absolute;
-  width: clamp(44px, 9vw, 74px);
+  width: clamp(46px, 5.2vw, 68px);
   aspect-ratio: 1.14;
   padding: 0;
   border: 1px solid var(--color-border-strong);
@@ -571,6 +595,18 @@ h3 {
 .fog-cell--experienced {
   border: 2px solid var(--color-secondary);
   background: rgb(229 236 227 / 94%);
+  box-shadow: 0 6px 14px rgb(81 111 84 / 14%);
+}
+
+.fog-cell--experienced::after {
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: auto;
+  border: 2px solid var(--color-secondary);
+  border-radius: 50%;
+  background: var(--color-surface);
+  content: "";
 }
 
 .fog-cell--memory {
@@ -584,16 +620,65 @@ h3 {
   z-index: 2;
   outline: 3px solid var(--color-tertiary);
   outline-offset: 2px;
+  transform: translate(-50%, -50%) scale(1.035);
+  box-shadow: 0 12px 28px rgb(61 58 120 / 24%);
 }
 
 .fog-cell__node {
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 22px;
+  height: 22px;
   margin: auto;
   border: 2px solid var(--color-primary);
   border-radius: 50%;
   background: var(--color-primary);
+  box-shadow: 0 0 0 5px rgb(255 253 248 / 72%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fog-cell {
+    transition:
+      transform 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  .fog-cell.is-revealing {
+    z-index: 4;
+    animation: memory-cell-reveal 520ms ease-out both;
+  }
+
+  .fog-cell.is-revealing .fog-cell__node {
+    animation: memory-node-reveal 420ms 100ms ease-out both;
+  }
+}
+
+@keyframes memory-cell-reveal {
+  0% {
+    opacity: 0.42;
+    transform: translate(-50%, -50%) scale(0.94);
+    box-shadow: 0 0 0 rgb(61 58 120 / 0%);
+  }
+  68% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.045);
+    box-shadow: 0 0 26px rgb(61 58 120 / 30%);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 8px 24px rgb(61 58 120 / 16%);
+  }
+}
+
+@keyframes memory-node-reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .map-compass {
@@ -668,11 +753,23 @@ h3 {
 
 .map-cell-detail,
 .coarse-area-section {
-  margin-top: 24px;
   padding: 24px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
+}
+
+.coarse-area-section {
+  margin-top: 24px;
+}
+
+.map-cell-detail--empty h2 {
+  margin: 4px 0 8px;
+}
+
+.map-cell-detail--empty p:last-child {
+  margin-bottom: 0;
+  color: var(--color-ink-muted);
 }
 
 .map-cell-detail__heading h2 {
@@ -714,7 +811,7 @@ h3 {
 }
 
 .map-memory-list {
-  margin-bottom: 16px;
+  margin-top: 16px;
   border-top: 1px solid var(--color-border);
 }
 
@@ -838,7 +935,17 @@ h3 {
 
   .memory-fog-grid,
   .memory-map-blank {
-    min-height: 390px;
+    min-height: 410px;
+  }
+}
+
+@media (max-width: 860px) {
+  .map-hero-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .map-hero-panel {
+    grid-row: 2;
   }
 }
 

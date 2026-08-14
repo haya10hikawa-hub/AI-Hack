@@ -150,4 +150,17 @@ describe("API route implementation contracts", () => {
     );
     expect(memoryMap).not.toMatch(/input\.(?:latitude|longitude)/u);
   });
+
+  it("uses an owned Map cell as a deterministic Search candidate scope", () => {
+    expect(search).toMatch(/refine\(isAllowedMemoryMapCell\)/u);
+    expect(search).toMatch(
+      /from\("memory_map_cells"\)[\s\S]*?\.eq\("user_id", user\.id\)[\s\S]*?\.eq\("cell_id", input\.cellId\)/u,
+    );
+    expect(search).toMatch(
+      /from\("memory_map_cell_memories"\)[\s\S]*?\.eq\("user_id", user\.id\)[\s\S]*?\.eq\("cell_id", input\.cellId\)/u,
+    );
+    expect(search).toMatch(/memoryQuery\.in\(\s*"id"/u);
+    expect(search).not.toMatch(/userId:\s*input/u);
+    expect(search).not.toMatch(/(?:latitude|longitude).*input\./u);
+  });
 });

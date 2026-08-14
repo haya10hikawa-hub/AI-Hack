@@ -104,6 +104,7 @@ function resultBuilder(data: unknown) {
   const builder = {
     select: vi.fn(),
     eq: vi.fn(),
+    in: vi.fn(),
     limit: vi.fn(),
     maybeSingle: vi.fn().mockResolvedValue(result),
     then: <TResult1 = typeof result, TResult2 = never>(
@@ -117,6 +118,7 @@ function resultBuilder(data: unknown) {
   };
   builder.select.mockReturnValue(builder);
   builder.eq.mockReturnValue(builder);
+  builder.in.mockReturnValue(builder);
   builder.limit.mockReturnValue(builder);
   return builder;
 }
@@ -192,7 +194,7 @@ function parsedQuery(keywords: string[]) {
   };
 }
 
-function jsonRequest(query: string): NextRequest {
+function jsonRequest(query: string, cellId?: string): NextRequest {
   return new NextRequest("http://localhost/api/search", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -200,6 +202,7 @@ function jsonRequest(query: string): NextRequest {
       query,
       timezone: "Asia/Tokyo",
       currentDate: "2026-08-14",
+      ...(cellId ? { cellId } : {}),
     }),
   });
 }
@@ -402,5 +405,150 @@ describe("search route response contracts", () => {
       },
     ]);
     expect(envelope.data.clarification).toBeNull();
+  });
+
+  it("restricts Map Recall to active Memories linked to an owned valid cell", async () => {
+    scenario = "grounded";
+    const cellId = "8a2e6e82175ffff";
+    const userClaim = {
+      id: claimId,
+      field: "activity",
+      value_json: { value: "FTC練習" },
+      origin: "user",
+      confidence_band: "high",
+      confirmation_status: "user_confirmed",
+      status: "active",
+      ai_run_id: null,
+      source_correction_id: correctionId,
+      created_at: now,
+      updated_at: now,
+      claim_evidence: [],
+    };
+    const tableData: Record<string, unknown> = {
+      memory_map_cells: { cell_id: cellId },
+      memory_map_cell_memories: [{ memory_id: memoryId }],
+      memories: [
+        memoryRow({
+          id: memoryId,
+          eventId,
+          title: "FTC練習",
+          claim: userClaim,
+        }),
+      ],
+      evidence: [],
+      user_corrections: [
+        {
+          id: correctionId,
+          memory_id: memoryId,
+          target_claim_id: "99999999-9999-4999-8999-999999999999",
+          action: "confirm",
+          value_json: { value: "FTC練習" },
+          created_claim_id: claimId,
+          idempotency_key: "map-confirmation",
+          created_at: now,
+        },
+      ],
+      memory_gaps: null,
+    };
+    const builders = new Map<string, ReturnType<typeof resultBuilder>>();
+    const supabase = {
+      from: vi.fn((table: string) => {
+        const builder = resultBuilder(tableData[table] ?? []);
+        builders.set(table, builder);
+        return builder;
+      }),
+    };
+    mocks.requireAuthenticatedUser.mockResolvedValue({
+      user: { id: userId },
+      supabase,
+    });
+    mocks.createAIProviderFromEnv.mockReturnValue({
+      parseSearchQuery: vi.fn().mockResolvedValue({
+        data: parsedQuery([]),
+        run: run(),
+      }),
+      rerankSearchCandidates: vi.fn().mockResolvedValue({
+        data: {
+          ranked: [{ memoryId, score: 0.9, matchReasons: ["地域が一致"] }],
+        },
+        run: run(),
+      }),
+      generateGroundedAnswer: vi.fn().mockResolvedValue({
+        data: {
+          mode: "answer",
+          segments: [{ text: "FTC練習のMemoryです。", claimIds: [claimId] }],
+          unknownReason: null,
+          clarificationQuestion: null,
+        },
+        run: run(),
+      }),
+    });
+
+    const response = await searchMemories(
+      jsonRequest("この辺で何してた？", cellId),
+    );
+    expect(response.status).toBe(200);
+    const envelope = z
+      .object({ data: SearchResponseSchema })
+      .strict()
+      .parse(await response.json());
+
+    expect(envelope.data.answerState).toBe("grounded");
+    expect(envelope.data.candidates).toHaveLength(1);
+    expect(envelope.data.candidates[0]).toMatchObject({
+      matchReasons: expect.arrayContaining(["Memory Mapで選んだ地域"]),
+    });
+    expect(builders.get("memories")?.in).toHaveBeenCalledWith("id", [memoryId]);
+  });
+
+  it("returns the same empty result for an unowned or unavailable valid cell", async () => {
+    scenario = "unknown";
+    const cellId = "8a2e6e82175ffff";
+    const supabase = {
+      from: vi.fn((table: string) =>
+        resultBuilder(table === "memory_map_cells" ? null : []),
+      ),
+    };
+    mocks.requireAuthenticatedUser.mockResolvedValue({
+      user: { id: userId },
+      supabase,
+    });
+    mocks.createAIProviderFromEnv.mockReturnValue({
+      parseSearchQuery: vi.fn().mockResolvedValue({
+        data: parsedQuery([]),
+        run: run(),
+      }),
+    });
+
+    const response = await searchMemories(
+      jsonRequest("この辺で何してた？", cellId),
+    );
+    const envelope = z
+      .object({ data: SearchResponseSchema })
+      .strict()
+      .parse(await response.json());
+    expect(response.status).toBe(200);
+    expect(envelope.data).toMatchObject({
+      answerState: "unknown",
+      candidates: [],
+      sources: [],
+    });
+    expect(mocks.createAIProviderFromEnv).not.toHaveBeenCalled();
+  });
+
+  it("rejects an invalid Map cell before retrieval", async () => {
+    scenario = "unknown";
+    const supabase = { from: vi.fn() };
+    mocks.requireAuthenticatedUser.mockResolvedValue({
+      user: { id: userId },
+      supabase,
+    });
+
+    const response = await searchMemories(
+      jsonRequest("この辺で何してた？", "not-a-cell"),
+    );
+    expect(response.status).toBe(400);
+    expect(supabase.from).not.toHaveBeenCalled();
+    expect(mocks.createAIProviderFromEnv).not.toHaveBeenCalled();
   });
 });

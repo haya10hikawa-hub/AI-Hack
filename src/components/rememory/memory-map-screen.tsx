@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Compass,
@@ -30,10 +30,12 @@ const stateLabel = {
 function FogGrid({
   cells,
   selectedCellId,
+  recentlyRevealedCellId,
   onSelect,
 }: {
   cells: MemoryMapCell[];
   selectedCellId: string | null;
+  recentlyRevealedCellId: string | null;
   onSelect: (cellId: string) => void;
 }) {
   const focus = selectedCellId ?? cells[0]?.cellId ?? null;
@@ -48,8 +50,8 @@ function FogGrid({
       return {
         cellId,
         cell: byId.get(cellId) ?? null,
-        x: 50 + (q - r) * 11.3,
-        y: 50 + (q + r) * 6.5,
+        x: 50 + (q - r) * 7,
+        y: 50 + (q + r) * 5.2,
       };
     });
   }, [cells, focus]);
@@ -82,7 +84,7 @@ function FogGrid({
           <button
             key={cellId}
             type="button"
-            className={`fog-cell fog-cell--${cell?.state ?? "unknown"}${selectedCellId === cellId ? " is-selected" : ""}`}
+            className={`fog-cell fog-cell--${cell?.state ?? "unknown"}${selectedCellId === cellId ? " is-selected" : ""}${recentlyRevealedCellId === cellId ? " is-revealing" : ""}`}
             style={{ left: `${x}%`, top: `${y}%` }}
             disabled={!cell}
             aria-label={label}
@@ -109,8 +111,11 @@ export function MemoryMapScreen() {
   const [locating, setLocating] = useState(false);
   const [enabling, setEnabling] = useState(false);
   const [permissionState, setPermissionState] = useState<
-    "idle" | "denied" | "unsupported" | "revealed"
+    "idle" | "denied" | "unavailable" | "timeout" | "unsupported" | "revealed"
   >("idle");
+  const [recentlyRevealedCellId, setRecentlyRevealedCellId] = useState<
+    string | null
+  >(null);
   const [message, setMessage] = useState<{
     tone: "sage" | "coral" | "error";
     text: string;
@@ -121,6 +126,17 @@ export function MemoryMapScreen() {
     data?.cells.find((cell) => cell.cellId === selectedCellId) ??
     data?.cells[0] ??
     null;
+
+  useEffect(() => {
+    if (
+      recentlyRevealedCellId === null ||
+      !data?.cells.some((cell) => cell.cellId === recentlyRevealedCellId)
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => setRecentlyRevealedCellId(null), 700);
+    return () => window.clearTimeout(timer);
+  }, [data?.cells, recentlyRevealedCellId]);
 
   const enableMap = async () => {
     setEnabling(true);
@@ -179,6 +195,7 @@ export function MemoryMapScreen() {
         })
           .then(() => {
             setSelectedCellId(cellId);
+            setRecentlyRevealedCellId(cellId);
             setPermissionState("revealed");
             setMessage({
               tone: "sage",
@@ -197,8 +214,14 @@ export function MemoryMapScreen() {
           })
           .finally(() => setLocating(false));
       },
-      () => {
-        setPermissionState("denied");
+      (error) => {
+        setPermissionState(
+          error.code === error.PERMISSION_DENIED
+            ? "denied"
+            : error.code === error.TIMEOUT
+              ? "timeout"
+              : "unavailable",
+        );
         setLocating(false);
       },
       { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 },
@@ -267,44 +290,17 @@ export function MemoryMapScreen() {
           />
         ) : data ? (
           <>
-            <section
-              className="map-privacy-gate"
-              aria-labelledby="map-location-title"
-            >
-              <div>
-                <LocateFixed aria-hidden="true" size={24} />
-                <div>
-                  <h2 id="map-location-title">現在地から地図をひらく</h2>
-                  <p>
-                    正確な位置情報は保存せず、この端末で約150mの地域セルに変換します。
-                  </p>
-                </div>
-              </div>
-              {data.enabled ? (
-                <button
-                  className="button button--primary"
-                  type="button"
-                  disabled={locating}
-                  onClick={revealCurrentCell}
-                >
-                  <Navigation aria-hidden="true" size={18} />
-                  {locating ? "地域へ変換中…" : "現在地を使う"}
-                </button>
-              ) : (
-                <button
-                  className="button button--primary"
-                  type="button"
-                  disabled={enabling}
-                  onClick={() => void enableMap()}
-                >
-                  {enabling ? "有効化中…" : "Memory Mapを有効にする"}
-                </button>
-              )}
-            </section>
-
             {permissionState === "denied" ? (
               <InlineNotice tone="coral">
-                位置情報が許可されませんでした。保存済みの地域とMemoryはそのまま見られます。ブラウザ設定を変更後、もう一度お試しください。
+                位置情報は許可されていません。保存済みの地域とMemoryはそのまま見られます。ブラウザ設定を変更後、もう一度お試しください。
+              </InlineNotice>
+            ) : permissionState === "unavailable" ? (
+              <InlineNotice tone="coral">
+                現在地を取得できませんでした。保存済みの地図を見ながら、通信状態のよい場所でもう一度お試しください。
+              </InlineNotice>
+            ) : permissionState === "timeout" ? (
+              <InlineNotice tone="coral">
+                現在地の取得に時間がかかっています。保存済みの地図はそのまま利用できます。もう一度お試しください。
               </InlineNotice>
             ) : permissionState === "unsupported" ? (
               <InlineNotice tone="coral">
@@ -312,102 +308,152 @@ export function MemoryMapScreen() {
               </InlineNotice>
             ) : null}
 
-            <section
-              className="memory-map-stage"
-              aria-labelledby="map-stage-title"
-            >
-              <div className="map-stage-heading">
-                <div>
-                  <p className="eyebrow">Fog of Memory</p>
-                  <h2 id="map-stage-title">あなたの世界</h2>
+            <div className="map-hero-layout">
+              <section
+                className="memory-map-stage"
+                aria-labelledby="map-stage-title"
+              >
+                <div className="map-stage-heading">
+                  <div>
+                    <p className="eyebrow">Fog of Memory</p>
+                    <h2 id="map-stage-title">あなたの世界</h2>
+                  </div>
+                  <dl className="map-legend" aria-label="地図の状態">
+                    <div>
+                      <dt className="legend-swatch legend-swatch--unknown" />
+                      <dd>未探索</dd>
+                    </div>
+                    <div>
+                      <dt className="legend-swatch legend-swatch--passed" />
+                      <dd>通過</dd>
+                    </div>
+                    <div>
+                      <dt className="legend-swatch legend-swatch--experienced" />
+                      <dd>体験</dd>
+                    </div>
+                    <div>
+                      <dt className="legend-swatch legend-swatch--memory" />
+                      <dd>Memory</dd>
+                    </div>
+                  </dl>
                 </div>
-                <dl className="map-legend" aria-label="地図の状態">
-                  <div>
-                    <dt className="legend-swatch legend-swatch--unknown" />
-                    <dd>未探索</dd>
+                <FogGrid
+                  cells={data.cells}
+                  selectedCellId={selectedCell?.cellId ?? null}
+                  recentlyRevealedCellId={recentlyRevealedCellId}
+                  onSelect={setSelectedCellId}
+                />
+                {data.cells.length === 0 ? (
+                  <div className="map-empty-copy">
+                    <MapPinOff aria-hidden="true" size={22} />
+                    <div>
+                      <h3>まだ地図に記憶がありません</h3>
+                      <span>
+                        現在地を使うと、最初の地域が静かにひらきます。
+                      </span>
+                    </div>
                   </div>
+                ) : null}
+              </section>
+
+              <aside className="map-hero-panel" aria-label="地域の操作と詳細">
+                <section
+                  className="map-privacy-gate"
+                  aria-labelledby="map-location-title"
+                >
                   <div>
-                    <dt className="legend-swatch legend-swatch--passed" />
-                    <dd>通過</dd>
+                    <LocateFixed aria-hidden="true" size={24} />
+                    <div>
+                      <h2 id="map-location-title">現在地からひらく</h2>
+                      <p>
+                        正確な位置情報は保存しません。端末内で約150mの粗い地域単位へ変換して最小化します。
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <dt className="legend-swatch legend-swatch--experienced" />
-                    <dd>体験</dd>
-                  </div>
-                  <div>
-                    <dt className="legend-swatch legend-swatch--memory" />
-                    <dd>Memory</dd>
-                  </div>
-                </dl>
-              </div>
-              <FogGrid
-                cells={data.cells}
-                selectedCellId={selectedCell?.cellId ?? null}
-                onSelect={setSelectedCellId}
-              />
-              {data.cells.length === 0 ? (
-                <div className="map-empty-copy">
-                  <MapPinOff aria-hidden="true" size={22} />
-                  <div>
-                    <h3>まだ地図に記憶がありません</h3>
-                    <span>現在地を使うと、最初の地域が静かにひらきます。</span>
-                  </div>
-                </div>
-              ) : null}
-            </section>
+                  {data.enabled ? (
+                    <button
+                      className="button button--primary map-location-cta"
+                      type="button"
+                      disabled={locating}
+                      onClick={revealCurrentCell}
+                    >
+                      <Navigation aria-hidden="true" size={18} />
+                      {locating ? "地域へ変換中…" : "現在地を使う"}
+                    </button>
+                  ) : (
+                    <button
+                      className="button button--primary map-location-cta"
+                      type="button"
+                      disabled={enabling}
+                      onClick={() => void enableMap()}
+                    >
+                      {enabling ? "有効化中…" : "Memory Mapを有効にする"}
+                    </button>
+                  )}
+                </section>
+
+                {selectedCell ? (
+                  <section
+                    className="map-cell-detail"
+                    aria-labelledby="selected-area-title"
+                  >
+                    <div className="map-cell-detail__heading">
+                      <span
+                        className={`area-state area-state--${selectedCell.state}`}
+                      >
+                        {stateLabel[selectedCell.state]}
+                      </span>
+                      <h2 id="selected-area-title">
+                        {selectedCell.coarsePlace ?? "ひらいた地域"}
+                      </h2>
+                      <p>
+                        {selectedCell.visitCount}回の訪問 ·{" "}
+                        {selectedCell.memoryCount}件のMemory
+                      </p>
+                    </div>
+                    <Link
+                      className="button button--primary map-recall-cta"
+                      href={`/search?q=${encodeURIComponent("この辺で何してた？")}&cellId=${encodeURIComponent(selectedCell.cellId)}`}
+                    >
+                      この辺の記憶を探す
+                    </Link>
+                    {selectedCell.memories.length > 0 ? (
+                      <ul className="map-memory-list">
+                        {selectedCell.memories.map((memory) => (
+                          <li key={memory.id}>
+                            <Link
+                              href={`/memories/${encodeURIComponent(memory.id)}`}
+                            >
+                              <span>
+                                <small>Memoryを見る</small>
+                                <strong>{memory.title}</strong>
+                              </span>
+                              <ArrowRight aria-hidden="true" size={18} />
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="muted-copy">
+                        この地域には、まだ根拠を持つactive
+                        Memoryが紐づいていません。
+                      </p>
+                    )}
+                  </section>
+                ) : (
+                  <section className="map-cell-detail map-cell-detail--empty">
+                    <p className="eyebrow">Place to Recall</p>
+                    <h2>地域を選ぶ</h2>
+                    <p>
+                      ひらいた地域を選ぶと、訪問回数とその場所のMemoryを確認できます。
+                    </p>
+                  </section>
+                )}
+              </aside>
+            </div>
 
             {data.partial ? (
               <InlineNotice tone="coral">{data.partialMessage}</InlineNotice>
-            ) : null}
-
-            {selectedCell ? (
-              <section
-                className="map-cell-detail"
-                aria-labelledby="selected-area-title"
-              >
-                <div className="map-cell-detail__heading">
-                  <span
-                    className={`area-state area-state--${selectedCell.state}`}
-                  >
-                    {stateLabel[selectedCell.state]}
-                  </span>
-                  <h2 id="selected-area-title">
-                    {selectedCell.coarsePlace ?? "ひらいた地域"}
-                  </h2>
-                  <p>
-                    {selectedCell.visitCount}回の訪問 ·{" "}
-                    {selectedCell.memoryCount}件のMemory
-                  </p>
-                </div>
-                {selectedCell.memories.length > 0 ? (
-                  <ul className="map-memory-list">
-                    {selectedCell.memories.map((memory) => (
-                      <li key={memory.id}>
-                        <Link
-                          href={`/memories/${encodeURIComponent(memory.id)}`}
-                        >
-                          <span>
-                            <small>Memory</small>
-                            <strong>{memory.title}</strong>
-                          </span>
-                          <ArrowRight aria-hidden="true" size={18} />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="muted-copy">
-                    この地域には、まだ根拠を持つactive
-                    Memoryが紐づいていません。
-                  </p>
-                )}
-                <Link
-                  className="button button--secondary"
-                  href={`/search?q=${encodeURIComponent("この辺で何してた？")}&cellId=${encodeURIComponent(selectedCell.cellId)}`}
-                >
-                  この辺の記憶を探す
-                </Link>
-              </section>
             ) : null}
 
             <section
