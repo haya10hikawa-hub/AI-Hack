@@ -1,5 +1,23 @@
 # Re:Memory Implementation Plan
 
+## 2026-08-14 final-completion continuation
+
+`main` already contains the complete photo-to-Memory MVP baseline and the
+durable Sequence analysis queue. This continuation keeps the product scope
+focused on the Hero Flow and closes the remaining code-level reliability gap:
+
+- preserve the last completed AI pipeline stage across leases and retries;
+- resume at `claims` or `gap` instead of paying for Vision again;
+- expose an authenticated owner-scoped retry action for failed reconstruction;
+- make the retry available from Home and Memory Detail without re-uploading;
+- add real PostgreSQL migration coverage plus route/UI regression tests;
+- provide a credential-gated live Hero smoke runner for the final hosted check.
+
+Hosted Supabase, OrcaRouter, email, and Vercel activation still require account
+credentials and remain an external release gate rather than a production fake.
+Calendar remains a post-MVP connector per `docs/PRODUCT_DECISIONS.md`; completing
+it before the real Hero Flow is activated would violate the documented priority.
+
 ## Current repository state
 
 The outer repository at `/Users/sotanakano/Documents/ChatGPT/AI-Hack` is the

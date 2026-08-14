@@ -9,12 +9,14 @@ import {
   CalendarDays,
   ChevronDown,
   Image as ImageIcon,
+  LoaderCircle,
   MapPin,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 
 import { AppShell } from "./app-shell";
-import { apiRequest, ApiError } from "./api-client";
+import { apiRequest, ApiError, jsonBody } from "./api-client";
 import { InlineNotice, StateView } from "./state-view";
 import type {
   ClaimItem,
@@ -84,6 +86,44 @@ export function MemoryDetailScreen() {
     "idle" | "confirming" | "deleting" | "deleted"
   >("idle");
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [retryingAnalysis, setRetryingAnalysis] = useState(false);
+  const [retryNotice, setRetryNotice] = useState<{
+    tone: "sage" | "error";
+    text: string;
+  } | null>(null);
+
+  async function retryAnalysis() {
+    if (!id || retryingAnalysis) return;
+    setRetryingAnalysis(true);
+    setRetryNotice(null);
+    try {
+      const result = await apiRequest<{ retryRequested: number }>(
+        "/api/analysis/retry",
+        {
+          method: "POST",
+          ...jsonBody({ memoryId: id }),
+        },
+      );
+      setRetryNotice({
+        tone: "sage",
+        text:
+          result.retryRequested > 0
+            ? "AI再構成を再開しました。"
+            : "再試行できる解析はありませんでした。状態を更新します。",
+      });
+      resource.reload();
+    } catch (error) {
+      setRetryNotice({
+        tone: "error",
+        text:
+          error instanceof ApiError
+            ? error.message
+            : "AI再構成を再開できませんでした。",
+      });
+    } finally {
+      setRetryingAnalysis(false);
+    }
+  }
 
   async function deleteMemory() {
     if (!id || deleteState === "deleting") return;
@@ -226,6 +266,38 @@ export function MemoryDetailScreen() {
               <InlineNotice tone="coral">
                 {data.partialMessage ||
                   "写真と確定情報は保存済みですが、AI再構成の一部はまだ完了していません。"}
+              </InlineNotice>
+            ) : null}
+
+            {data.memory.processingState === "failed" ? (
+              <div className="analysis-retry-action">
+                <div>
+                  <strong>途中結果から再開できます</strong>
+                  <p>保存済みの写真をもう一度選ぶ必要はありません。</p>
+                </div>
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  disabled={retryingAnalysis}
+                  onClick={() => void retryAnalysis()}
+                >
+                  {retryingAnalysis ? (
+                    <LoaderCircle
+                      className="spin"
+                      aria-hidden="true"
+                      size={18}
+                    />
+                  ) : (
+                    <RefreshCw aria-hidden="true" size={18} />
+                  )}
+                  {retryingAnalysis ? "再開しています…" : "AI再構成を再試行"}
+                </button>
+              </div>
+            ) : null}
+
+            {retryNotice ? (
+              <InlineNotice tone={retryNotice.tone}>
+                {retryNotice.text}
               </InlineNotice>
             ) : null}
 

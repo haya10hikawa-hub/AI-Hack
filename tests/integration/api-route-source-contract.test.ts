@@ -15,6 +15,10 @@ const upload = routeSource("app/api/upload/route.ts");
 const analysisJobs = routeSource("src/server/services/analysis-jobs.ts");
 const analysisWorker = routeSource("app/api/internal/analysis-worker/route.ts");
 const analysisResume = routeSource("app/api/analysis/process/route.ts");
+const analysisRetry = routeSource("app/api/analysis/retry/route.ts");
+const analysisPipeline = routeSource(
+  "src/server/services/analysis-pipeline.ts",
+);
 const search = routeSource("app/api/search/route.ts");
 
 describe("API route implementation contracts", () => {
@@ -89,6 +93,13 @@ describe("API route implementation contracts", () => {
       /retryDelaySeconds\(input\.job\.attemptCount\)/u,
     );
     expect(analysisJobs).toMatch(/download\(asset\.derivative_storage_key\)/u);
+    expect(analysisJobs).toMatch(/resumeFrom:\s*input\.job\.stage/u);
+    expect(analysisPipeline).toMatch(
+      /if \(resumeFrom === "analysis"\)[\s\S]*?provider\.analyzeSequence/u,
+    );
+    expect(analysisPipeline).toMatch(
+      /if \(resumeFrom !== "gap"\)[\s\S]*?provider\.generateEventClaims/u,
+    );
   });
 
   it("protects the scheduled worker with a server-only bearer secret", () => {
@@ -103,6 +114,17 @@ describe("API route implementation contracts", () => {
     expect(analysisResume).toMatch(/requireAuthenticatedUser\(\)/u);
     expect(analysisResume).toMatch(/userId:\s*user\.id/u);
     expect(analysisResume).not.toMatch(/request\.json\(\)/u);
+  });
+
+  it("lets an owner explicitly retry only failed or waiting analysis", () => {
+    expect(analysisRetry).toMatch(/assertSameOrigin\(request\)/u);
+    expect(analysisRetry).toMatch(/requireAuthenticatedUser\(\)/u);
+    expect(analysisRetry).toMatch(
+      /\.eq\("user_id", user\.id\)[\s\S]*?\.in\("status", \["dead", "retry_wait"\]\)/u,
+    );
+    expect(analysisRetry).toMatch(
+      /p_user_id:\s*user\.id,[\s\S]*?p_sequence_id:\s*job\.sequence_id,[\s\S]*?p_memory_id:\s*job\.memory_id/u,
+    );
   });
 
   it("grounds displayed search sources in claim ids selected by the answer", () => {

@@ -58,6 +58,12 @@ is null for the scheduled worker and the verified session owner for the Home
 resume endpoint. Failed jobs use exponential backoff and become `dead` only
 after the persisted maximum attempt count.
 
+`stage` is the earliest unfinished checkpoint. Once Vision observations and the
+Memory title/summary are durable it advances to `claims`; once active Claims and
+context dimensions are durable it advances to `gap`. Retry, manual re-enqueue,
+and expired-lease reclaim preserve that checkpoint, so downstream failure does
+not repeat Vision or require the user to upload photos again.
+
 `create_evidence_backed_claim(owner, memory, field, value, origin, confidence,
 evidence_ids, ai_run, dedupe_key, activate := true) -> claim uuid` validates
 owner, evidence membership, AI-run provenance, exact-location minimization, and

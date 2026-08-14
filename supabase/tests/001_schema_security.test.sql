@@ -248,6 +248,12 @@ select is(
   'the owning worker advances the durable stage and lease'
 );
 select is(
+  (select stage from public.sequence_analysis_jobs
+   where sequence_id = 'a1000000-0000-4000-8000-000000000001'),
+  'claims',
+  'the durable checkpoint records the earliest unfinished stage'
+);
+select is(
   public.finish_sequence_analysis_job(
     public.enqueue_sequence_analysis_job(
       '10000000-0000-4000-8000-000000000001',
@@ -258,6 +264,12 @@ select is(
   ),
   'retry_wait',
   'a retryable failure remains durable'
+);
+select is(
+  (select stage from public.sequence_analysis_jobs
+   where sequence_id = 'a1000000-0000-4000-8000-000000000001'),
+  'claims',
+  'retry scheduling preserves the claims checkpoint'
 );
 reset role;
 select is(
@@ -276,12 +288,24 @@ select lives_ok(
   're-enqueue makes retryable work immediately available'
 );
 select is(
+  (select stage from public.sequence_analysis_jobs
+   where sequence_id = 'a1000000-0000-4000-8000-000000000001'),
+  'claims',
+  'manual retry preserves the last durable checkpoint'
+);
+select is(
   (select count(*)::integer from public.claim_sequence_analysis_job(
     '50000000-0000-4000-8000-000000000005', 300,
     '10000000-0000-4000-8000-000000000001'
   )),
   1,
   'retry work can be reclaimed'
+);
+select is(
+  (select stage from public.sequence_analysis_jobs
+   where sequence_id = 'a1000000-0000-4000-8000-000000000001'),
+  'claims',
+  'a reclaimed worker resumes from claims instead of Vision analysis'
 );
 select is(
   public.finish_sequence_analysis_job(

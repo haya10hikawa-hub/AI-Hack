@@ -67,6 +67,24 @@ pnpm verify
 pnpm test:e2e
 ```
 
+本番相当のSupabase・AI・Authを通す最終Hero smokeは、確認済みの専用テスト
+アカウントと1〜12枚の写真ディレクトリを指定して実行します。実データを使うため、
+通常のmock E2Eには含めていません。
+
+```bash
+LIVE_BASE_URL=https://your-rememory.example \
+LIVE_HERO_EMAIL=hero-test@example.com \
+LIVE_HERO_PASSWORD='your-test-password' \
+LIVE_PHOTO_DIR=/absolute/path/to/hero-photos \
+LIVE_COARSE_PLACE=神山 \
+pnpm test:live:hero
+```
+
+このsmokeは login → upload → terminal analysis → gap confirm → 同じ確認語で
+再検索 → UserCorrection provenance → Memory削除を実行し、first Event / terminal
+analysisの実測時間をJSONで出力します。専用アカウントを使用し、写真ディレクトリに
+含める画像の外部AI利用に同意できる場合だけ実行してください。
+
 主要コマンドと必要な環境変数は [`package.json`](./package.json) と
 [`.env.example`](./.env.example) を参照してください。
 
@@ -494,12 +512,14 @@ core flow後のopt-in enrichment、ConfirmはBottom Navigationへ常設せずHom
 - metadata-stripped derivative、server-only AI解析、Evidence/Claim provenance
 - exact GPSを保持しないcoarse-gridと、設定可能な粗い地名の自動解決
 - durable sequence analysis job、lease、段階heartbeat、自動retry、Cron/user resume
+- `analysis → claims → gap` checkpoint再開と、画面からの再試行（再upload不要）
 - Context Completeness / Memory Gap / atomic user correction
 - structured retrieval、AI rerank、Grounded Answer、ambiguity/unknown gate
 - Memory Thread、詳細、確認、検索、opt-in検索学習、Privacy & AI
 - メール確認再送、パスワード再設定、JSONデータ出力、アカウント完全削除
 - RLS/private Storage、rate/cost gate、same-origin checks、CSP/security headers
 - health endpoint、production runbook、unit/integration/E2E、CI format gate
+- 実サービス専用 `pnpm test:live:hero` とfirst Event/terminal時間のJSON計測
 
 production data path に demo/fake backend はありません。E2Eだけが許可された外部境界 fixture を使います。
 UI 画像は引き続き design reference で、実際の画面はユーザー自身のデータまたは正直な空状態を表示します。

@@ -24,6 +24,14 @@ export interface AnalysisRepresentativeAsset {
   derivativeHeight: number;
 }
 
+interface ActiveClaimSnapshot {
+  id: string;
+  field: string;
+  value: unknown;
+  origin: "deterministic" | "ai" | "user";
+  confirmationStatus: "unconfirmed" | "user_confirmed" | "disputed";
+}
+
 const UPLOAD_AI_ENVIRONMENT = {
   ...process.env,
   AI_REQUEST_TIMEOUT_MS: process.env.AI_UPLOAD_TIMEOUT_MS ?? "8000",
@@ -37,6 +45,7 @@ export async function analyzePersistedSequence(input: {
   memoryId: string;
   representativeAssets: AnalysisRepresentativeAsset[];
   database: SupabaseClient;
+  resumeFrom?: AnalysisPipelineStage;
   onStage?: (stage: AnalysisPipelineStage) => Promise<void>;
 }) {
   const provider = createAIProviderFromEnv(
@@ -51,71 +60,96 @@ export async function analyzePersistedSequence(input: {
     requestId: input.requestId,
     allowStrongModel: false,
   };
-  const eventResult = await input.database
-    .from("events")
-    .select("id")
-    .eq("user_id", input.userId)
-    .eq("sequence_id", input.sequenceId)
-    .single();
-  if (eventResult.error !== null) {
-    throw new Error("Event ownership check failed.");
+  const resumeFrom = input.resumeFrom ?? "analysis";
+  const [eventResult, memoryResult] = await Promise.all([
+    input.database
+      .from("events")
+      .select("id")
+      .eq("user_id", input.userId)
+      .eq("sequence_id", input.sequenceId)
+      .single(),
+    input.database
+      .from("memories")
+      .select("importance_band,summary")
+      .eq("user_id", input.userId)
+      .eq("id", input.memoryId)
+      .single(),
+  ]);
+  if (eventResult.error !== null || memoryResult.error !== null) {
+    throw new Error("Analysis ownership check failed.");
   }
 
-  const analysis = await provider.analyzeSequence(context, {
-    sequenceId: input.sequenceId,
-    assets: input.representativeAssets.slice(0, 4).map((asset) => ({
-      assetId: asset.id,
-      mimeType: "image/webp" as const,
-      derivativeBase64: asset.derivative.toString("base64"),
-      width: asset.derivativeWidth,
-      height: asset.derivativeHeight,
-      capturedAt: asset.capturedAt,
-      coarsePlace: asset.coarsePlace,
-    })),
-  });
-  const analysisRunId = await persistAIRun(
-    input.database,
-    input.userId,
-    analysis.run,
-  );
-  const evidenceRows = analysis.data.observations.map((observation) => {
-    const value = {
-      value: observation.value,
-      confidenceBand: observation.confidenceBand,
-      uncertainty: observation.uncertainty,
-    };
-    return {
-      id: crypto.randomUUID(),
-      user_id: input.userId,
-      event_id: eventResult.data.id,
-      asset_id: observation.assetId,
-      kind: "ai_observation",
-      field: observation.field,
-      value_json: value,
-      source_type: "ai_observation",
-      source_version: analysis.run.schemaVersion,
-      dedupe_key: stablePipelineKey(
-        input.sequenceId,
-        `evidence:${observation.assetId}`,
-        observation.field,
-        value,
-      ),
-      observed_at: null,
-      validity: observation.confidenceBand === "low" ? "uncertain" : "valid",
-    };
-  });
-  if (evidenceRows.length > 0) {
-    const evidenceInsert = await input.database
-      .from("evidence")
-      .upsert(evidenceRows, {
-        onConflict: "user_id,dedupe_key",
-        ignoreDuplicates: true,
-      });
-    if (evidenceInsert.error !== null) {
-      throw new Error("AI evidence persistence failed.");
+  let summaryCandidate =
+    typeof memoryResult.data.summary === "string"
+      ? memoryResult.data.summary
+      : "AI再構成の要約はありません。";
+
+  if (resumeFrom === "analysis") {
+    const analysis = await provider.analyzeSequence(context, {
+      sequenceId: input.sequenceId,
+      assets: input.representativeAssets.slice(0, 4).map((asset) => ({
+        assetId: asset.id,
+        mimeType: "image/webp" as const,
+        derivativeBase64: asset.derivative.toString("base64"),
+        width: asset.derivativeWidth,
+        height: asset.derivativeHeight,
+        capturedAt: asset.capturedAt,
+        coarsePlace: asset.coarsePlace,
+      })),
+    });
+    await persistAIRun(input.database, input.userId, analysis.run);
+    const evidenceRows = analysis.data.observations.map((observation) => {
+      const value = {
+        value: observation.value,
+        confidenceBand: observation.confidenceBand,
+        uncertainty: observation.uncertainty,
+      };
+      return {
+        id: crypto.randomUUID(),
+        user_id: input.userId,
+        event_id: eventResult.data.id,
+        asset_id: observation.assetId,
+        kind: "ai_observation",
+        field: observation.field,
+        value_json: value,
+        source_type: "ai_observation",
+        source_version: analysis.run.schemaVersion,
+        dedupe_key: stablePipelineKey(
+          input.sequenceId,
+          `evidence:${observation.assetId}`,
+          observation.field,
+          value,
+        ),
+        observed_at: null,
+        validity: observation.confidenceBand === "low" ? "uncertain" : "valid",
+      };
+    });
+    if (evidenceRows.length > 0) {
+      const evidenceInsert = await input.database
+        .from("evidence")
+        .upsert(evidenceRows, {
+          onConflict: "user_id,dedupe_key",
+          ignoreDuplicates: true,
+        });
+      if (evidenceInsert.error !== null) {
+        throw new Error("AI evidence persistence failed.");
+      }
     }
+    const updateMemory = await input.database
+      .from("memories")
+      .update({
+        title: analysis.data.titleCandidate,
+        summary: analysis.data.summaryCandidate,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.memoryId)
+      .eq("user_id", input.userId);
+    if (updateMemory.error !== null) {
+      throw new Error("Memory reconstruction update failed.");
+    }
+    summaryCandidate = analysis.data.summaryCandidate;
+    await input.onStage?.("claims");
   }
-  await input.onStage?.("claims");
 
   const allEvidenceResult = await input.database
     .from("evidence")
@@ -145,88 +179,92 @@ export async function analyzePersistedSequence(input: {
         | "location"
         | "system",
     }));
-  const generated = await provider.generateEventClaims(context, {
-    memoryId: input.memoryId,
-    evidence: claimInputEvidence,
-  });
-  const claimsRunId = await persistAIRun(
-    input.database,
-    input.userId,
-    generated.run,
-  );
-  const createdClaims: Array<{ id: string; field: string; value: unknown }> =
-    [];
-  for (const claim of generated.data.claims) {
-    const { data, error } = await input.database.rpc(
-      "create_evidence_backed_claim",
-      {
-        p_user_id: input.userId,
-        p_memory_id: input.memoryId,
-        p_field: claim.field,
-        p_value_json: claim.value,
-        p_origin: "ai",
-        p_confidence_band: claim.confidenceBand,
-        p_evidence_ids: claim.evidenceIds,
-        p_ai_run_id: claimsRunId,
-        p_dedupe_key: stablePipelineKey(
-          input.sequenceId,
-          "claim",
-          claim.field,
-          claim.value,
-        ),
-        p_activate: claim.confidenceBand !== "low",
-      },
+  if (resumeFrom !== "gap") {
+    const generated = await provider.generateEventClaims(context, {
+      memoryId: input.memoryId,
+      evidence: claimInputEvidence,
+    });
+    const claimsRunId = await persistAIRun(
+      input.database,
+      input.userId,
+      generated.run,
     );
-    if (error !== null || typeof data !== "string") {
-      throw new Error("Evidence-backed AI claim transaction failed.");
+    for (const claim of generated.data.claims) {
+      const { data, error } = await input.database.rpc(
+        "create_evidence_backed_claim",
+        {
+          p_user_id: input.userId,
+          p_memory_id: input.memoryId,
+          p_field: claim.field,
+          p_value_json: claim.value,
+          p_origin: "ai",
+          p_confidence_band: claim.confidenceBand,
+          p_evidence_ids: claim.evidenceIds,
+          p_ai_run_id: claimsRunId,
+          p_dedupe_key: stablePipelineKey(
+            input.sequenceId,
+            "claim",
+            claim.field,
+            claim.value,
+          ),
+          p_activate: claim.confidenceBand !== "low",
+        },
+      );
+      if (error !== null || typeof data !== "string") {
+        throw new Error("Evidence-backed AI claim transaction failed.");
+      }
     }
-    if (claim.confidenceBand !== "low") {
-      createdClaims.push({ id: data, field: claim.field, value: claim.value });
-    }
-  }
-  const updateMemory = await input.database
-    .from("memories")
-    .update({
-      title: analysis.data.titleCandidate,
-      summary: analysis.data.summaryCandidate,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", input.memoryId)
-    .eq("user_id", input.userId);
-  if (updateMemory.error !== null) {
-    throw new Error("Memory reconstruction update failed.");
   }
 
-  const contextRowsResult = await input.database
-    .from("memory_context_dimensions")
-    .select("dimension,status,importance_weight,active_claim_id")
+  const activeClaimsResult = await input.database
+    .from("claims")
+    .select(
+      "id,field,value_json,origin,confirmation_status,confidence_band,status,created_at",
+    )
     .eq("user_id", input.userId)
-    .eq("memory_id", input.memoryId);
-  const memoryResult = await input.database
-    .from("memories")
-    .select("importance_band")
-    .eq("user_id", input.userId)
-    .eq("id", input.memoryId)
-    .single();
-  if (contextRowsResult.error !== null || memoryResult.error !== null) {
-    throw new Error("Memory gap inputs failed.");
+    .eq("memory_id", input.memoryId)
+    .eq("status", "active")
+    .order("created_at", { ascending: true });
+  if (activeClaimsResult.error !== null) {
+    throw new Error("Active claims loading failed.");
   }
-  const knownFields = new Map(
-    createdClaims.map((claim) => [claim.field, claim.id]),
-  );
+  const activeClaims: ActiveClaimSnapshot[] = activeClaimsResult.data
+    .filter(
+      (claim) =>
+        (claim.origin === "deterministic" ||
+          claim.origin === "ai" ||
+          claim.origin === "user") &&
+        (claim.confirmation_status === "unconfirmed" ||
+          claim.confirmation_status === "user_confirmed" ||
+          claim.confirmation_status === "disputed") &&
+        claim.confirmation_status !== "disputed" &&
+        (claim.origin !== "ai" ||
+          claim.confidence_band === "medium" ||
+          claim.confidence_band === "high"),
+    )
+    .map((claim) => ({
+      id: claim.id,
+      field: claim.field,
+      value: claim.value_json,
+      origin: claim.origin as ActiveClaimSnapshot["origin"],
+      confirmationStatus:
+        claim.confirmation_status as ActiveClaimSnapshot["confirmationStatus"],
+    }));
+
+  const knownFields = preferredClaimsByField(activeClaims);
   for (const [field, dimension] of [
     ["activity", "activity"],
     ["purpose", "purpose"],
     ["people", "people"],
     ["result", "result"],
   ] as const) {
-    const claimId = knownFields.get(field);
-    if (claimId !== undefined) {
+    const claim = knownFields.get(field);
+    if (claim !== undefined) {
       const dimensionUpdate = await input.database
         .from("memory_context_dimensions")
         .update({
           status: "known",
-          active_claim_id: claimId,
+          active_claim_id: claim.id,
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", input.userId)
@@ -237,13 +275,21 @@ export async function analyzePersistedSequence(input: {
       }
     }
   }
+  const contextRowsResult = await input.database
+    .from("memory_context_dimensions")
+    .select("dimension,status,importance_weight,active_claim_id")
+    .eq("user_id", input.userId)
+    .eq("memory_id", input.memoryId);
+  if (contextRowsResult.error !== null) {
+    throw new Error("Memory gap inputs failed.");
+  }
   const refreshedRows = contextRowsResult.data.map((row) => {
-    const claimId = knownFields.get(row.dimension);
+    const claim = knownFields.get(row.dimension);
     return {
       dimension: row.dimension,
-      status: claimId === undefined ? row.status : "known",
+      status: claim === undefined ? row.status : "known",
       importanceWeight: row.importance_weight,
-      activeClaimId: claimId ?? row.active_claim_id,
+      activeClaimId: claim?.id ?? row.active_claim_id,
     };
   });
   await input.onStage?.("gap");
@@ -257,11 +303,17 @@ export async function analyzePersistedSequence(input: {
       memoryId: input.memoryId,
       importanceBand: memoryResult.data.importance_band,
       missingDimensions: completeness.missingDimensions,
-      knownFacts: createdClaims.map((claim) => ({
+      knownFacts: activeClaims.slice(0, 50).map((claim) => ({
         claimId: claim.id,
         field: claim.field,
         value: claim.value as never,
-        truthLayer: "ai_inference" as const,
+        truthLayer:
+          claim.origin === "user" &&
+          claim.confirmationStatus === "user_confirmed"
+            ? ("user_confirmed" as const)
+            : claim.origin === "ai"
+              ? ("ai_inference" as const)
+              : ("deterministic" as const),
       })),
       evidence: claimInputEvidence,
     });
@@ -342,7 +394,7 @@ export async function analyzePersistedSequence(input: {
             reason_json: {
               candidateSpecificity: candidate.candidateSpecificity,
               candidateOptionValue: candidate.candidateOptionValue,
-              evidenceSummary: analysis.data.summaryCandidate,
+              evidenceSummary: summaryCandidate,
             },
             status: "ready_to_ask",
             asked_count: 0,
@@ -355,7 +407,26 @@ export async function analyzePersistedSequence(input: {
       }
     }
   }
-  void analysisRunId;
+}
+
+function preferredClaimsByField(claims: ActiveClaimSnapshot[]) {
+  const preferred = new Map<string, ActiveClaimSnapshot>();
+  for (const claim of [...claims].sort(
+    (left, right) => claimPriority(right) - claimPriority(left),
+  )) {
+    if (!preferred.has(claim.field)) preferred.set(claim.field, claim);
+  }
+  return preferred;
+}
+
+function claimPriority(claim: ActiveClaimSnapshot): number {
+  if (
+    claim.origin === "user" &&
+    claim.confirmationStatus === "user_confirmed"
+  ) {
+    return 3;
+  }
+  return claim.origin === "deterministic" ? 2 : 1;
 }
 
 function stablePipelineKey(

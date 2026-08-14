@@ -195,6 +195,56 @@ test("partial Memory keeps its provenance visible and can be deleted", async ({
   expect(deleteRequests).toBe(1);
 });
 
+test("failed AI reconstruction can resume without re-uploading photos", async ({
+  page,
+}) => {
+  const memoryId = "11111111-1111-4111-8111-111111111111";
+  let retryBody: unknown = null;
+  await mockAuthenticatedUser(page);
+  await page.route(`**/api/memories/${memoryId}`, (route) =>
+    json(route, {
+      memory: {
+        id: memoryId,
+        title: "2026年4月12日の記憶",
+        capturedAt: "2026-04-12T09:00:00+09:00",
+        placeLabel: "神山",
+        photoCount: 10,
+        representativeImageUrl: null,
+        state: "evidence",
+        processingState: "failed",
+        hasOpenGap: false,
+        evidenceCount: 2,
+      },
+      reconstruction: null,
+      claims: [],
+      evidence: [],
+      partial: true,
+      partialMessage:
+        "決定的なEvidenceは保存済みです。AI再構成は保存済みの途中結果から再試行できます。",
+    }),
+  );
+  await page.route("**/api/analysis/retry", (route) => {
+    retryBody = route.request().postDataJSON();
+    return json(route, {
+      retryRequested: 1,
+      processing: {
+        claimed: 1,
+        completed: 0,
+        retryScheduled: 0,
+        dead: 0,
+      },
+    });
+  });
+
+  await page.goto(`/memories/${memoryId}`);
+  await expect(
+    page.getByText("保存済みの写真をもう一度選ぶ必要はありません。"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "AI再構成を再試行" }).click();
+  await expect(page.getByText("AI再構成を再開しました。")).toBeVisible();
+  expect(retryBody).toEqual({ memoryId });
+});
+
 test("choosing later explains when the Memory question will return", async ({
   page,
 }) => {

@@ -554,6 +554,27 @@ h3 {
   color: #6c2828;
 }
 
+.analysis-retry-action {
+  display: flex;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.analysis-retry-action strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.analysis-retry-action p {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: 14px;
+}
+
 .thread-node {
   display: block;
   width: 12px;
@@ -2381,6 +2402,15 @@ h3 {
   }
 
   .recall-entry .button {
+    width: 100%;
+  }
+
+  .analysis-retry-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analysis-retry-action .button {
     width: 100%;
   }
 
