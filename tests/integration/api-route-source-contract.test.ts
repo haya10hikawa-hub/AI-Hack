@@ -21,6 +21,7 @@ const analysisPipeline = routeSource(
 );
 const search = routeSource("app/api/search/route.ts");
 const memoryMap = routeSource("app/api/map/route.ts");
+const health = routeSource("app/api/health/route.ts");
 
 describe("API route implementation contracts", () => {
   it("confirms a gap through the gap-aware atomic RPC", () => {
@@ -162,5 +163,16 @@ describe("API route implementation contracts", () => {
     expect(search).toMatch(/memoryQuery\.in\(\s*"id"/u);
     expect(search).not.toMatch(/userId:\s*input/u);
     expect(search).not.toMatch(/(?:latitude|longitude).*input\./u);
+  });
+
+  it("requires every configured AI model role before reporting healthy", () => {
+    for (const name of [
+      "AI_MODEL_VISION_CHEAP",
+      "AI_MODEL_EVENT_CHEAP",
+      "AI_MODEL_CHAT_CHEAP",
+      "AI_MODEL_EVENT_STRONG",
+    ]) {
+      expect(health).toContain(`process.env.${name}`);
+    }
   });
 });
