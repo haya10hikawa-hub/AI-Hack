@@ -11,6 +11,10 @@
 Copy `.env.example` into the deployment environment. Never place server secrets
 in a `NEXT_PUBLIC_*` variable.
 
+For the submission-day order of operations, use
+[`TODAY_SHIP_CHECKLIST.md`](./TODAY_SHIP_CHECKLIST.md). It separates the work
+that can finish today from post-MVP roadmap items.
+
 When `GEOCODER_API_BASE_URL` is set, only the center of the already-quantized
 approximately 10 km grid is sent. If it is unavailable, upload remains usable
 and the UI accepts a manual city/municipality label.
@@ -24,8 +28,9 @@ pnpm dlx supabase@latest db push
 ```
 
 Confirm that the private `rememory-private` bucket exists and that migrations
-`202608130001`, `202608140002`, and `202608140003` are present. The browser is
-read-only for provenance data; server routes require `SUPABASE_SECRET_KEY`.
+`202608130001`, `202608140002`, `202608140003`, and `202608140004` are present.
+The browser is read-only for provenance data; server routes require
+`SUPABASE_SECRET_KEY`.
 
 ## 3. Auth URLs
 
@@ -57,11 +62,14 @@ Run before every production release:
 pnpm install --frozen-lockfile
 pnpm verify
 pnpm test:e2e
+pnpm preflight:prod -- --env-file=.env.production
+pnpm preflight:prod -- --env-file=.env.production --check-models
 ```
 
 After deploy, check:
 
 ```bash
+pnpm preflight:prod -- --env-file=.env.production --check-health
 curl --fail-with-body https://YOUR_ORIGIN/api/health
 ```
 

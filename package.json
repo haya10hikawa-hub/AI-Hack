@@ -20,6 +20,7 @@
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
     "test:live:hero": "node scripts/live-hero-smoke.mjs",
+    "preflight:prod": "node scripts/production-preflight.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
