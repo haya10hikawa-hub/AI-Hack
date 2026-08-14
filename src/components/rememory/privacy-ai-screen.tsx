@@ -6,13 +6,17 @@ import {
   Brain,
   CalendarDays,
   Clock3,
+  Download,
   Image as ImageIcon,
+  KeyRound,
   LoaderCircle,
   LogOut,
   MapPin,
   Search,
   ShieldCheck,
+  Trash2,
 } from "lucide-react";
+import Link from "next/link";
 
 import { apiRequest, jsonBody } from "./api-client";
 import { AppShell } from "./app-shell";
@@ -84,6 +88,9 @@ export function PrivacyAiScreen() {
     text: string;
   } | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const settings = savedOverride ?? resource.data;
 
@@ -130,6 +137,61 @@ export function PrivacyAiScreen() {
             : "ログアウトできませんでした。",
       });
       setSigningOut(false);
+    }
+  };
+
+  const exportAccount = async () => {
+    setExporting(true);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/account/export", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!response.ok) throw new Error("データを書き出せませんでした。");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `rememory-export-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setMessage({
+        tone: "sage",
+        text: "データを書き出しました。写真のリンクは1時間だけ有効です。",
+      });
+    } catch (caught) {
+      setMessage({
+        tone: "error",
+        text:
+          caught instanceof Error
+            ? caught.message
+            : "データを書き出せませんでした。",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setDeletingAccount(true);
+    setMessage(null);
+    try {
+      await apiRequest("/api/account/delete", {
+        method: "POST",
+        ...jsonBody({ confirmation: deleteConfirmation }),
+      });
+      router.replace("/");
+      router.refresh();
+    } catch (caught) {
+      setMessage({
+        tone: "error",
+        text:
+          caught instanceof Error
+            ? caught.message
+            : "アカウントを削除できませんでした。",
+      });
+      setDeletingAccount(false);
     }
   };
 
@@ -276,10 +338,10 @@ export function PrivacyAiScreen() {
               />
               <ToggleRow
                 id="searchLearning"
-                label="検索学習（準備中）"
-                description="現在は保存だけ行い、検索結果にはまだ利用しません"
+                label="検索結果をあなた向けに学習"
+                description="役に立った・違ったと明示した結果だけを、同じ検索の並び替えに使います。オフにすると履歴を削除します"
                 checked={settings.searchLearning}
-                disabled
+                disabled={savingKey !== null}
                 icon={Search}
                 onChange={updateSetting}
               />
@@ -295,24 +357,93 @@ export function PrivacyAiScreen() {
               className="account-actions"
               aria-labelledby="account-actions-title"
             >
-              <div>
+              <div className="account-actions__intro">
                 <p className="eyebrow">Account</p>
                 <h2 id="account-actions-title">アカウント</h2>
-                <p>この端末のRe:Memoryセッションを終了します。</p>
+                <p>
+                  パスワード、データの持ち出し、完全削除をここから管理できます。
+                </p>
               </div>
-              <button
-                className="button button--secondary"
-                type="button"
-                disabled={signingOut}
-                onClick={() => void signOut()}
-              >
-                {signingOut ? (
-                  <LoaderCircle className="spin" aria-hidden="true" size={18} />
-                ) : (
-                  <LogOut aria-hidden="true" size={18} />
-                )}
-                {signingOut ? "ログアウト中…" : "ログアウト"}
-              </button>
+              <div className="account-action-grid">
+                <Link
+                  className="button button--secondary"
+                  href="/auth/reset-password"
+                >
+                  <KeyRound aria-hidden="true" size={18} />
+                  パスワードを変更
+                </Link>
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  disabled={exporting}
+                  onClick={() => void exportAccount()}
+                >
+                  {exporting ? (
+                    <LoaderCircle
+                      className="spin"
+                      aria-hidden="true"
+                      size={18}
+                    />
+                  ) : (
+                    <Download aria-hidden="true" size={18} />
+                  )}
+                  {exporting ? "書き出し中…" : "データを書き出す"}
+                </button>
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  disabled={signingOut}
+                  onClick={() => void signOut()}
+                >
+                  {signingOut ? (
+                    <LoaderCircle
+                      className="spin"
+                      aria-hidden="true"
+                      size={18}
+                    />
+                  ) : (
+                    <LogOut aria-hidden="true" size={18} />
+                  )}
+                  {signingOut ? "ログアウト中…" : "ログアウト"}
+                </button>
+              </div>
+              <div className="danger-zone">
+                <div>
+                  <strong>アカウントを完全に削除</strong>
+                  <p>
+                    すべてのMemory、Evidence、元画像を削除します。元に戻せません。
+                  </p>
+                </div>
+                <label htmlFor="delete-confirmation">
+                  続ける場合は「削除」と入力
+                </label>
+                <input
+                  className="text-input"
+                  id="delete-confirmation"
+                  value={deleteConfirmation}
+                  onChange={(event) =>
+                    setDeleteConfirmation(event.target.value)
+                  }
+                  autoComplete="off"
+                />
+                <button
+                  className="button button--danger"
+                  type="button"
+                  disabled={deleteConfirmation !== "削除" || deletingAccount}
+                  onClick={() => void deleteAccount()}
+                >
+                  {deletingAccount ? (
+                    <LoaderCircle
+                      className="spin"
+                      aria-hidden="true"
+                      size={18}
+                    />
+                  ) : (
+                    <Trash2 aria-hidden="true" size={18} />
+                  )}
+                  {deletingAccount ? "削除しています…" : "完全に削除"}
+                </button>
+              </div>
             </section>
           </div>
         ) : (

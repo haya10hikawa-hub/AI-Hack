@@ -213,11 +213,15 @@ Implement typed operations analogous to:
 ```ts
 interface AIProvider {
   analyzeSequence(input: AnalyzeSequenceInput): Promise<AnalyzeSequenceResult>;
-  generateEventClaims(input: GenerateEventClaimsInput): Promise<GenerateEventClaimsResult>;
+  generateEventClaims(
+    input: GenerateEventClaimsInput,
+  ): Promise<GenerateEventClaimsResult>;
   detectMemoryGap(input: DetectMemoryGapInput): Promise<DetectMemoryGapResult>;
   parseSearchQuery(input: ParseSearchQueryInput): Promise<ParsedMemoryQuery>;
   rerankSearchCandidates(input: RerankInput): Promise<RerankResult>;
-  generateGroundedAnswer(input: GroundedAnswerInput): Promise<GroundedAnswerResult>;
+  generateGroundedAnswer(
+    input: GroundedAnswerInput,
+  ): Promise<GroundedAnswerResult>;
 }
 ```
 
@@ -379,6 +383,7 @@ Verify:
 At minimum implement and run tests for:
 
 ### Unit
+
 - media validation
 - EXIF normalization
 - SHA/dedup logic
@@ -393,6 +398,7 @@ At minimum implement and run tests for:
 - candidate ambiguity gate
 
 ### Integration
+
 - auth + user isolation
 - RLS expectations
 - storage ownership

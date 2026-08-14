@@ -812,7 +812,7 @@ MVPで以下は作らない。
 - sharing UI
 - friends
 - follow
--共同編集
+- 共同編集
 
 ただし将来の共有に拡張しやすいよう、Memoryのowner / visibility等を過度に固定しない。
 

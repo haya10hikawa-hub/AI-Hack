@@ -80,11 +80,11 @@ Event Semantic Representation は Claim ではない。
 
 論理的には1つの機能だが、責務は3層に分ける。
 
-| レイヤー | 責務 |
-|---|---|
-| `src/domain/` | Facet型、検証、Distillationの決定ロジック |
-| `src/server/ai/` | 写真からFacetを抽出するAI契約 |
-| `src/server/services/` | AI結果の保存とMemory構築への接続 |
+| レイヤー               | 責務                                      |
+| ---------------------- | ----------------------------------------- |
+| `src/domain/`          | Facet型、検証、Distillationの決定ロジック |
+| `src/server/ai/`       | 写真からFacetを抽出するAI契約             |
+| `src/server/services/` | AI結果の保存とMemory構築への接続          |
 
 想定:
 
@@ -126,7 +126,7 @@ AIに最終的な代表3枚を自由選択させるのではなく、AIは各写
       "id": "f2",
       "type": "activity",
       "label": "adjusting robot",
-      "importance": 0.90,
+      "importance": 0.9,
       "assetIds": ["a2"]
     }
   ]

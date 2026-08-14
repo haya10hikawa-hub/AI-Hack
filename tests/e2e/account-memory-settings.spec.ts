@@ -51,6 +51,28 @@ test("login submits the API contract and opens the empty Memory Thread", async (
   });
 });
 
+test("password recovery sends a non-enumerating reset request", async ({
+  page,
+}) => {
+  let submitted: unknown = null;
+  await page.route("**/api/auth/password-reset", async (route) => {
+    submitted = route.request().postDataJSON();
+    return json(route, {
+      sent: true,
+      message:
+        "登録済みの場合は再設定メールを送信しました。メール内のリンクを開いてください。",
+    });
+  });
+
+  await page.goto("/auth/reset-password");
+  await page.getByLabel("メールアドレス").fill("hero@example.com");
+  await page.getByRole("button", { name: "再設定メールを送る" }).click();
+  await expect(
+    page.getByText("登録済みの場合は再設定メールを送信しました。"),
+  ).toBeVisible();
+  expect(submitted).toEqual({ email: "hero@example.com" });
+});
+
 test("privacy settings persist and sign-out returns to login", async ({
   page,
 }) => {
@@ -64,14 +86,15 @@ test("privacy settings persist and sign-out returns to login", async ({
     locationPermissionState: "prompt",
     calendarConnectionState: "not_connected",
   } as const;
-  let patchBody: unknown = null;
+  const patchBodies: unknown[] = [];
   let signedOut = false;
 
   await mockAuthenticatedUser(page);
   await page.route("**/api/settings/privacy-ai", async (route) => {
     if (route.request().method() === "GET") return json(route, settings);
-    patchBody = route.request().postDataJSON();
-    return json(route, { ...settings, useLocation: true });
+    const body = route.request().postDataJSON() as Record<string, boolean>;
+    patchBodies.push(body);
+    return json(route, { ...settings, ...body });
   });
   await page.route("**/api/auth/sign-out", (route) => {
     signedOut = true;
@@ -86,7 +109,14 @@ test("privacy settings persist and sign-out returns to login", async ({
   await locationToggle.click();
   await expect(page.getByText("設定を保存しました。")).toBeVisible();
   await expect(locationToggle).toHaveAttribute("aria-checked", "true");
-  expect(patchBody).toEqual({ useLocation: true });
+  expect(patchBodies).toContainEqual({ useLocation: true });
+
+  const learningToggle = page.getByRole("switch", {
+    name: /検索結果をあなた向けに学習/u,
+  });
+  await learningToggle.click();
+  await expect(learningToggle).toHaveAttribute("aria-checked", "false");
+  expect(patchBodies).toContainEqual({ searchLearning: false });
 
   await page.getByRole("button", { name: "ログアウト" }).click();
   await expect(page).toHaveURL(/\/auth\/login$/u);

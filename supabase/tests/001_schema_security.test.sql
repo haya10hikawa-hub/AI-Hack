@@ -25,6 +25,8 @@ select has_table('public', 'ai_rate_limits', 'ai_rate_limits exists');
 select has_table('public', 'ai_daily_budgets', 'ai_daily_budgets exists');
 select has_table('public', 'ai_cost_reservations', 'ai_cost_reservations exists');
 select has_table('public', 'sequence_analysis_jobs', 'sequence_analysis_jobs exists');
+select has_table('public', 'search_feedback', 'search_feedback exists');
+select has_table('public', 'coarse_location_labels', 'coarse location label cache exists');
 
 select ok(
   not exists (
@@ -35,7 +37,7 @@ select ok(
       ('claim_evidence'), ('user_corrections'), ('memory_context_dimensions'),
       ('memory_gaps'), ('memory_relations'), ('personal_context'), ('ai_runs'),
       ('ai_rate_limits'), ('ai_daily_budgets'), ('ai_cost_reservations'),
-      ('sequence_analysis_jobs')
+      ('sequence_analysis_jobs'), ('search_feedback'), ('coarse_location_labels')
     ) required(table_name)
     left join pg_class table_class
       on table_class.relname = required.table_name

@@ -17,6 +17,10 @@ import {
   getMemoryThread,
   RepositoryError,
 } from "@/src/server/services/memories";
+import {
+  normalizeSearchFeedbackQuery,
+  searchFeedbackQueryHash,
+} from "@/src/server/services/search-feedback";
 import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
@@ -102,6 +106,28 @@ export async function POST(request: NextRequest) {
         ? [{ from: row.key, to }]
         : [];
     });
+    const feedbackEnabled =
+      preferenceResult.data?.search_learning_enabled === true;
+    const feedbackResult = feedbackEnabled
+      ? await database
+          .from("search_feedback")
+          .select("memory_id,outcome")
+          .eq("user_id", user.id)
+          .eq(
+            "query_hash",
+            searchFeedbackQueryHash(normalizeSearchFeedbackQuery(input.query)),
+          )
+      : { data: [], error: null };
+    if (feedbackResult.error !== null)
+      throw new RepositoryError("load_search_feedback");
+    const feedbackByMemoryId = new Map<string, "helpful" | "not_helpful">(
+      (feedbackResult.data ?? []).flatMap((row) =>
+        typeof row.memory_id === "string" &&
+        (row.outcome === "helpful" || row.outcome === "not_helpful")
+          ? [[row.memory_id, row.outcome] as const]
+          : [],
+      ),
+    );
     const parsed = await provider.parseSearchQuery(context, {
       rawQuery: input.query,
       confirmedAliases: aliases,
@@ -121,7 +147,11 @@ export async function POST(request: NextRequest) {
     if (memoryResult.error !== null)
       throw new RepositoryError("retrieve_memory_candidates");
     const candidates = (memoryResult.data ?? []).map((row) =>
-      scoreCandidate(row, parsed.data),
+      scoreCandidate(
+        row,
+        parsed.data,
+        feedbackByMemoryId.get(String(row.id)) ?? null,
+      ),
     );
     const eligible = candidates.filter(
       ({ structuredScore }) => structuredScore >= 0.2,
@@ -139,6 +169,7 @@ export async function POST(request: NextRequest) {
         partialMessage: thread.partial
           ? "Memoryを再構成しています。完了後に同じ言葉でもう一度検索してください。"
           : null,
+        feedbackEnabled,
       });
     }
 
@@ -209,6 +240,7 @@ export async function POST(request: NextRequest) {
           "候補をひとつに決める根拠が足りません。近いMemoryを選んでください。",
         partial: thread.partial,
         partialMessage: thread.partialMessage,
+        feedbackEnabled,
       });
     }
     if (decision.kind === "unknown") {
@@ -221,6 +253,7 @@ export async function POST(request: NextRequest) {
         clarification: null,
         partial: thread.partial,
         partialMessage: thread.partialMessage,
+        feedbackEnabled,
       });
     }
 
@@ -330,6 +363,7 @@ export async function POST(request: NextRequest) {
       clarification: answered.data.clarificationQuestion,
       partial: thread.partial,
       partialMessage: thread.partialMessage,
+      feedbackEnabled,
     });
   } catch (error) {
     if (auditContext !== undefined) {
@@ -347,7 +381,11 @@ type Parsed = Awaited<
   ReturnType<ReturnType<typeof createAIProviderFromEnv>["parseSearchQuery"]>
 >["data"];
 
-function scoreCandidate(row: Record<string, unknown>, query: Parsed) {
+function scoreCandidate(
+  row: Record<string, unknown>,
+  query: Parsed,
+  feedback: "helpful" | "not_helpful" | null,
+) {
   const eventValue = Array.isArray(row.event) ? row.event[0] : row.event;
   const event = (eventValue ?? {}) as Record<string, unknown>;
   const claims: StoredClaim[] = Array.isArray(row.claims)
@@ -430,6 +468,13 @@ function scoreCandidate(row: Record<string, unknown>, query: Parsed) {
     query.dateRange === null
   )
     score = 0.25;
+  if (feedback === "helpful") {
+    score += 0.2;
+    reasons.push("以前の検索で役に立ったMemory");
+  } else if (feedback === "not_helpful") {
+    score -= 0.3;
+    reasons.push("以前の検索フィードバックを反映");
+  }
   return {
     id: String(row.id),
     eventId: String(row.event_id),

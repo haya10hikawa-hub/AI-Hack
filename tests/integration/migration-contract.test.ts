@@ -29,6 +29,8 @@ const privateTables = [
   "memory_relations",
   "personal_context",
   "sequence_analysis_jobs",
+  "search_feedback",
+  "coarse_location_labels",
 ] as const;
 
 describe("baseline migration security contract", () => {
@@ -60,6 +62,9 @@ describe("baseline migration security contract", () => {
     );
     expect(sql).not.toMatch(
       /grant execute on function public\.(?:create_evidence_backed_claim|apply_user_correction|apply_memory_gap_correction)[^;]+to authenticated/iu,
+    );
+    expect(sql).toMatch(
+      /grant select, insert, update, delete on all tables in schema public to service_role/iu,
     );
   });
 
@@ -107,5 +112,28 @@ describe("baseline migration security contract", () => {
       /claim\.origin = 'user'[\s\S]*claim\.confidence_band in \('medium','high'\)/iu,
     );
     expect(sql).toMatch(/claim\.confirmation_status <> 'disputed'/iu);
+  });
+
+  it("keeps opt-in search feedback owner scoped and removable", () => {
+    expect(sql).toMatch(/create table public\.search_feedback/iu);
+    expect(sql).toMatch(/outcome in \('helpful', 'not_helpful'\)/iu);
+    expect(sql).toMatch(/create policy search_feedback_select_own/iu);
+    expect(sql).toMatch(
+      /revoke all on table public\.search_feedback from anon, authenticated/iu,
+    );
+    expect(sql).toMatch(
+      /foreign key \(memory_id, user_id\)[\s\S]*references public\.memories\(id, user_id\) on delete cascade/iu,
+    );
+  });
+
+  it("caches only coarse public locality labels service-side", () => {
+    expect(sql).toMatch(/create table public\.coarse_location_labels/iu);
+    expect(sql).toMatch(/grid_key text primary key/iu);
+    expect(sql).toMatch(
+      /revoke all on table public\.coarse_location_labels from anon, authenticated/iu,
+    );
+    expect(sql).not.toMatch(
+      /create table public\.coarse_location_labels[\s\S]*?(?:latitude|longitude)\s+(?:numeric|double|text)/iu,
+    );
   });
 });

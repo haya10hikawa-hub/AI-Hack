@@ -110,6 +110,7 @@ export interface SearchPayload {
   clarification?: string | null;
   partial?: boolean;
   partialMessage?: string | null;
+  feedbackEnabled?: boolean;
 }
 
 export interface UploadAcceptedItem {

@@ -27,6 +27,11 @@ export const NormalizedExifSchema = z
 export type CoarseLocation = z.infer<typeof CoarseLocationSchema>;
 export type NormalizedExif = z.infer<typeof NormalizedExifSchema>;
 
+export interface CoarseLocationCenter {
+  latitude: number;
+  longitude: number;
+}
+
 export interface ExifNormalizationOptions {
   /** Grid size in degrees. 0.1 is roughly 8–11 km in Japan. */
   coarseGridDegrees?: number;
@@ -225,6 +230,38 @@ export function coarsenCoordinates(
     key: `grid:${latitudeBucket.toString(36)}:${longitudeBucket.toString(36)}:${normalizedGridDegrees}`,
     precisionKm,
   };
+}
+
+/**
+ * Decodes only the center of the already-coarsened grid. The original GPS
+ * coordinate cannot be reconstructed from this value.
+ */
+export function coarseLocationCenter(
+  location: CoarseLocation,
+): CoarseLocationCenter | null {
+  const match = location.key.match(
+    /^grid:([0-9a-z]+):([0-9a-z]+):([0-9]+(?:\.[0-9]+)?)$/u,
+  );
+  if (match === null) return null;
+  const latitudeBucket = Number.parseInt(match[1]!, 36);
+  const longitudeBucket = Number.parseInt(match[2]!, 36);
+  const gridDegrees = Number(match[3]);
+  if (
+    !Number.isInteger(latitudeBucket) ||
+    !Number.isInteger(longitudeBucket) ||
+    !Number.isFinite(gridDegrees) ||
+    gridDegrees <= 0
+  ) {
+    return null;
+  }
+  const latitude = latitudeBucket * gridDegrees - 90 + gridDegrees / 2;
+  const longitude = longitudeBucket * gridDegrees - 180 + gridDegrees / 2;
+  return latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180
+    ? { latitude, longitude }
+    : null;
 }
 
 function emptyExif(warnings: string[]): NormalizedExif {

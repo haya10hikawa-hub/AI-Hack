@@ -2,9 +2,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  timeout: 30_000,
+  timeout: 60_000,
   expect: { timeout: 7_500 },
   fullyParallel: true,
+  // Next dev compiles routes on demand. A single browser worker prevents one
+  // project from starving another during that first compilation on small CI hosts.
+  workers: 1,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {

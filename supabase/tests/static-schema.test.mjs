@@ -29,6 +29,8 @@ const privateTables = [
   "ai_daily_budgets",
   "ai_cost_reservations",
   "sequence_analysis_jobs",
+  "search_feedback",
+  "coarse_location_labels",
 ];
 
 for (const table of privateTables) {
@@ -66,6 +68,10 @@ assert.match(migration, /create policy rememory_storage_select_own/);
 assert.doesNotMatch(
   migration,
   /create policy rememory_storage_(?:insert|update|delete)_own/,
+);
+assert.match(
+  migration,
+  /grant select, insert, update, delete on all tables in schema public to service_role/,
 );
 assert.match(migration, /create table public\.sequence_analysis_jobs/);
 assert.match(migration, /for update skip locked/);

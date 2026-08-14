@@ -348,6 +348,7 @@ The most important circular shapes are the evidence/inference nodes. Preserve ci
 This is the signature component and should receive the highest visual QA attention.
 
 **Compact state**
+
 - Node + time axis
 - Memory title
 - Date/time
@@ -356,6 +357,7 @@ This is the signature component and should receive the highest visual QA attenti
 - Minimal status label only if it changes interpretation
 
 **Expanded state**
+
 - Representative photo(s)
 - AI summary clearly labeled as AI reconstruction/inference
 - Related evidence and relations
