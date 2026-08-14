@@ -43,6 +43,21 @@ asset list must exactly equal the persisted representative set. Always finish
 with `complete_sequence_analysis(owner, sequence, complete|failed|not_supported)`;
 it clears the lease and synchronizes every sequence asset's terminal state.
 
+New ingestion uses the durable queue RPCs below. The older direct Sequence
+lease remains available for migration compatibility but should not be used by
+new worker code.
+
+- `enqueue_sequence_analysis_job(owner, sequence, memory) -> job uuid`
+- `claim_sequence_analysis_job(worker, lease_seconds, optional_owner) -> job row`
+- `touch_sequence_analysis_job(job, worker, stage, lease_seconds) -> boolean`
+- `finish_sequence_analysis_job(job, worker, succeeded, error_code, retry_delay) -> status`
+
+Claim uses `FOR UPDATE SKIP LOCKED`, updates the Sequence and its assets in the
+same transaction, and can recover an expired processing lease. `optional_owner`
+is null for the scheduled worker and the verified session owner for the Home
+resume endpoint. Failed jobs use exponential backoff and become `dead` only
+after the persisted maximum attempt count.
+
 `create_evidence_backed_claim(owner, memory, field, value, origin, confidence,
 evidence_ids, ai_run, dedupe_key, activate := true) -> claim uuid` validates
 owner, evidence membership, AI-run provenance, exact-location minimization, and

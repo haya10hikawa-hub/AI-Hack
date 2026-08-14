@@ -51,11 +51,13 @@ Docker が必要です。
 ```bash
 pnpm dlx supabase start
 pnpm dlx supabase db reset
+pnpm dlx supabase test db
 ```
 
 hosted project へ反映する場合は先に `supabase link` で対象 project を明示してから
 `pnpm dlx supabase db push` を実行してください。`.env.local` には少なくとも
 Supabase URL/publishable key、`APP_ORIGIN`、AI endpoint/key/model IDs を設定します。
+scheduled analysis workerを使う環境では、32 bytes以上のランダムな`CRON_SECRET`も設定します。
 AI を未設定の環境では、架空データへフォールバックせず、復旧可能な設定エラーを表示します。
 
 品質ゲート:
@@ -487,6 +489,7 @@ Hero Flow が壊れた状態で Optional Feature へ進まないでください�
 
 - Auth、private workspace、画像 upload、EXIF正規化、sequence clustering
 - metadata-stripped derivative、server-only AI解析、Evidence/Claim provenance
+- durable sequence analysis job、lease、段階heartbeat、自動retry、Cron/user resume
 - Context Completeness / Memory Gap / atomic user correction
 - structured retrieval、AI rerank、Grounded Answer、ambiguity/unknown gate
 - Memory Thread、詳細、確認、検索、Privacy & AI、完全削除UX
@@ -495,6 +498,8 @@ Hero Flow が壊れた状態で Optional Feature へ進まないでください�
 
 production data path に demo/fake backend はありません。E2Eだけが許可された外部境界 fixture を使います。
 UI 画像は引き続き design reference で、実際の画面はユーザー自身のデータまたは正直な空状態を表示します。
+
+AI再構成jobはアップロード応答前にDBへ保存されます。`after()`は初回処理を早く始めるためだけに使い、失敗またはprocess終了後はlease期限切れとして再取得できます。Home表示中は認証済みユーザー自身のjobを再開し、Vercel CronはHobbyでもdeployできる1日1回の最終回収です。Pro環境で1分間隔へ変更する場合も、同じworker endpointと`CRON_SECRET`を使います。
 
 ---
 

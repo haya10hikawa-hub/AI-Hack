@@ -3,6 +3,8 @@
 /playwright-report/
 /test-results/
 /coverage/
+/supabase/.branches/
+/supabase/.temp/
 /.env
 /.env.*
 !/.env.example

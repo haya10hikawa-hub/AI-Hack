@@ -1,14 +1,15 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const migrationPath = fileURLToPath(
-  new URL(
-    "../../supabase/migrations/202608130001_initial_rememory.sql",
-    import.meta.url,
-  ),
+const migrationDirectory = fileURLToPath(
+  new URL("../../supabase/migrations/", import.meta.url),
 );
-const sql = readFileSync(migrationPath, "utf8");
+const sql = readdirSync(migrationDirectory)
+  .filter((name) => name.endsWith(".sql"))
+  .sort()
+  .map((name) => readFileSync(`${migrationDirectory}/${name}`, "utf8"))
+  .join("\n");
 
 const privateTables = [
   "profiles",
@@ -27,6 +28,7 @@ const privateTables = [
   "memory_gaps",
   "memory_relations",
   "personal_context",
+  "sequence_analysis_jobs",
 ] as const;
 
 describe("baseline migration security contract", () => {
@@ -68,6 +70,32 @@ describe("baseline migration security contract", () => {
       /create policy rememory_storage_(?:insert|update|delete)_own/iu,
     );
     expect(sql).toMatch(/auth\.uid\(\)::text \|\| '\/assets\//u);
+  });
+
+  it("keeps durable analysis jobs service-only and lease based", () => {
+    expect(sql).toMatch(/create table public\.sequence_analysis_jobs/iu);
+    expect(sql).toMatch(/for update skip locked/iu);
+    expect(sql).toMatch(
+      /insert into public\.sequence_analysis_jobs[\s\S]*sequence\.analysis_status in \('pending','processing','failed'\)/iu,
+    );
+    expect(sql).toMatch(
+      /create or replace function public\.enqueue_sequence_analysis_job/iu,
+    );
+    expect(sql).toMatch(
+      /create or replace function public\.claim_sequence_analysis_job/iu,
+    );
+    expect(sql).toMatch(
+      /create or replace function public\.touch_sequence_analysis_job/iu,
+    );
+    expect(sql).toMatch(
+      /create or replace function public\.finish_sequence_analysis_job/iu,
+    );
+    expect(sql).toMatch(
+      /grant execute on function public\.claim_sequence_analysis_job\([^)]+\)\s+to service_role/iu,
+    );
+    expect(sql).not.toMatch(
+      /grant execute on function public\.(?:enqueue|claim|touch|finish)_sequence_analysis_job[^;]+to authenticated/iu,
+    );
   });
 
   it("exposes only active supported grounded claims from active memories", () => {

@@ -12,6 +12,8 @@ export default defineConfig([
     "playwright-report/**",
     "test-results/**",
     "coverage/**",
+    "supabase/.branches/**",
+    "supabase/.temp/**",
     "next-env.d.ts",
   ]),
 ]);
