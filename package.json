@@ -22,7 +22,6 @@
     "test:live:hero": "node scripts/live-hero-smoke.mjs",
     "preflight:prod": "node scripts/production-preflight.mjs",
     "demo:map:seed": "node scripts/seed-memory-map-demo.mjs",
-    "preflight:prod": "node scripts/production-preflight.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
