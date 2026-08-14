@@ -1149,6 +1149,7 @@ begin
     return query select v_correction_id, v_created_claim_id, v_target_status, v_memory_status;
     return;
   end if;
+  v_correction_id := gen_random_uuid();
 
   if p_target_claim_id is not null then
     select * into v_target

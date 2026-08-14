@@ -55,4 +55,30 @@ describe("account lifecycle route contract", () => {
       "const existingId = cookieStore.get(PUBLIC_PREVIEW_COOKIE)?.value;",
     );
   });
+
+  it("lets the server-side service role execute private DB guard functions", () => {
+    const migration = source(
+      "supabase/migrations/202608150001_allow_service_role_private_guards.sql",
+    );
+    expect(migration).toContain(
+      "grant usage on schema private to service_role",
+    );
+    expect(migration).toContain(
+      "grant execute on all functions in schema private to service_role",
+    );
+    expect(migration).not.toContain(" to anon");
+    expect(migration).not.toContain(" to authenticated");
+  });
+
+  it("keeps fresh user corrections from nulling their generated id", () => {
+    const migration = source(
+      "supabase/migrations/202608150002_fix_apply_user_correction_idempotency.sql",
+    );
+    expect(migration).toContain("select uc.id, uc.created_claim_id");
+    expect(migration).toContain("if found then");
+    expect(migration).toContain("v_correction_id := gen_random_uuid();");
+    expect(
+      migration.indexOf("v_correction_id := gen_random_uuid();"),
+    ).toBeGreaterThan(migration.indexOf("end if;"));
+  });
 });
