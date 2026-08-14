@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -107,6 +107,13 @@ export function SearchScreen() {
   );
   const [savingFeedback, setSavingFeedback] = useState(false);
   const online = useConnectivity();
+
+  useEffect(() => {
+    const prefilled = new URLSearchParams(window.location.search).get("q");
+    if (prefilled) {
+      queueMicrotask(() => setQuery(prefilled.slice(0, 500)));
+    }
+  }, []);
 
   const search = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

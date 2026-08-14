@@ -132,6 +132,8 @@ AI 推定より、ユーザー本人の確認・訂正を優先します。
 
 写真・位置情報・個人情報を必要以上に外部 AI Provider へ送らない設計を採用します。
 
+Memory Map は現在地をブラウザ内で H3 セルへ即時変換し、正確な緯度・経度を保存・送信しません。外部地図タイルも使用しません。詳細は [Memory Exploration Map privacy contract](./docs/MEMORY_MAP_PRIVACY.md) を参照してください。
+
 ---
 
 ## Signature UX — Memory Thread
