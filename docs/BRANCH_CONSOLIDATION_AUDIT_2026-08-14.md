@@ -11,6 +11,7 @@ History rewriting, force pushes, hosted database resets, and production seed ope
 - Repository: `haya10hikawa-hub/AI-Hack`
 - Audited main tip: `3c8e8d978bbb4bcd43b0a18e32f622bf3cbd8521`
 - First consolidation merge tip: `052690e65938f5b8d2b38d66e6172fa654a5a466`
+- Repaired green main tip before final grant integration: `0364d60a6fd84eecf9669b2fd47120cce4ad7403`
 - Discovery: `git fetch --all --prune`, followed by enumeration of `refs/remotes/origin`
 - Patch check: `git cherry origin/main origin/<branch>` and `git log --left-right --cherry-pick origin/main...origin/<branch>`
 - Content check: merge-base ancestry, three-dot diff, commit inspection, and comparison with current `main`
@@ -22,6 +23,7 @@ History rewriting, force pushes, hosted database resets, and production seed ope
 | `agent/document-parallel-workflow-option`  | `24dcf8a4d8e614b96399c2c1290442e60cbdaf17` | Valid unique documentation; two commits not patch-equivalent to `main`                                                    | Preserve `WORKFLOW_OPTIONS.md` and its README link in the consolidation change                      |
 | `codex/durable-analysis-jobs`              | `b41833420da4d5dfa5c20e3fc54b10f4b2c80ac4` | Tip is an ancestor of `main`; no branch-side patch remains                                                                | Delete only after verified `main` is updated                                                        |
 | `codex/final-product-completion`           | `0f0a3cc52834a33ac3e4ef48929d1985c1d59b44` | Tip is an ancestor of `main`; no branch-side patch remains                                                                | Delete only after verified `main` is updated                                                        |
+| `codex/fix-memory-map-service-role-grants` | `66aac44f6f637657b10e3d7d1b7829cd78d548a1` | Valid service-role grants for the two Memory Map tables plus migration documentation                                      | Preserve the unique migration commit through PR #35 after updating it from green `main`             |
 | `codex/handoff-roadmap`                    | `a6372c952df0e56546e9dc71225138529766802a` | Two unique documentation/comment commits, but their durable-job and GitHub Actions status is superseded by current `main` | Do not merge the stale patch; retain this recorded tip for recovery, then delete after verification |
 | `codex/memory-exploration-map-mvp`         | `c4b0626d0f2706f7a57ec63c110d30c88d7f0bc1` | Valid unique implementation, migration, documentation, and tests; four non-merge commits not patch-equivalent to `main`   | Preserve all four unique commits in the consolidation change                                        |
 | `codex/orcarouter-production-preflight-v2` | `86451263db2c5341ffac4ade9c36b25639e46720` | Valid production preflight, health, runbook, checklist, and contract-test changes discovered after the first merge        | Preserve the unique commit in a follow-up consolidation change                                      |
@@ -42,6 +44,7 @@ The consolidation branch was created from the audited `origin/main`. The followi
 - Workflow proposal: `45313fda4d999b7dd8d702d69b2292e6bef86981`, `24dcf8a4d8e614b96399c2c1290442e60cbdaf17`
 - Memory Exploration Map: `def2b3443f627a1dbe9983c4950001cf8e797268`, `03f2fa4d1009bb9df5a555c18d92d415744be383`, `13213e760440c02e528cb4e6c049d028ffe2a617`, `c4b0626d0f2706f7a57ec63c110d30c88d7f0bc1`
 - OrcaRouter production preflight: `86451263db2c5341ffac4ade9c36b25639e46720`
+- Memory Map service-role grants: `66aac44f6f637657b10e3d7d1b7829cd78d548a1`
 
 The Memory Map branch's merge-from-main commit was intentionally not replayed; its resulting content is already represented by the latest-main baseline plus the four branch-side commits above.
 
@@ -52,5 +55,5 @@ Before remote branch deletion, record:
 1. full local verification results;
 2. successful GitHub pull-request CI;
 3. the resulting `main` tip;
-4. content and patch checks proving the three preserved change sets exist on updated `main`;
+4. content and patch checks proving all preserved change sets exist on updated `main`;
 5. the final remote branch list.
