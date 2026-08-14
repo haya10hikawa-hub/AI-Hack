@@ -8,7 +8,10 @@ import {
   routeError,
 } from "@/src/server/http/responses";
 import { RepositoryError } from "@/src/server/services/memories";
-import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
+import {
+  clearPublicPreviewUserCookie,
+  requireAuthenticatedUser,
+} from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
 const DeleteSchema = z.object({ confirmation: z.literal("削除") });
@@ -52,6 +55,7 @@ export async function POST(request: NextRequest) {
       throw new RepositoryError("delete_auth_account");
     // Clearing the browser session is best-effort after Auth has deleted the user.
     await supabase.auth.signOut().catch(() => undefined);
+    await clearPublicPreviewUserCookie();
     return dataResponse({
       deleted: true,
       message: "アカウント、Memory、Evidence、写真を削除しました。",
