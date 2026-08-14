@@ -19,12 +19,13 @@ const PatchSchema = z
     useCalendar: z.boolean().optional(),
     usePersonalContext: z.boolean().optional(),
     searchLearning: z.boolean().optional(),
+    memoryMap: z.boolean().optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0);
 
 const selectedColumns =
-  "use_photos,use_captured_at,use_location,use_calendar,use_personal_context,search_learning_enabled";
+  "use_photos,use_captured_at,use_location,use_calendar,use_personal_context,search_learning_enabled,memory_map_enabled";
 
 function toPayload(row: Record<string, unknown>) {
   return {
@@ -34,6 +35,7 @@ function toPayload(row: Record<string, unknown>) {
     useCalendar: row.use_calendar === true,
     usePersonalContext: row.use_personal_context !== false,
     searchLearning: row.search_learning_enabled === true,
+    memoryMap: row.memory_map_enabled === true,
     locationPermissionState: "prompt" as const,
     calendarConnectionState: "not_connected" as const,
   };
@@ -95,6 +97,9 @@ export async function PATCH(request: NextRequest) {
       ...(input.searchLearning === undefined
         ? {}
         : { search_learning_enabled: input.searchLearning }),
+      ...(input.memoryMap === undefined
+        ? {}
+        : { memory_map_enabled: input.memoryMap }),
       updated_at: new Date().toISOString(),
     };
     const { data, error } = await supabase

@@ -35,6 +35,8 @@ const privateTables = [
   "sequence_analysis_jobs",
   "search_feedback",
   "coarse_location_labels",
+  "memory_map_cells",
+  "memory_map_cell_memories",
 ] as const;
 
 describe("baseline migration security contract", () => {
@@ -153,6 +155,25 @@ describe("baseline migration security contract", () => {
     );
     expect(sql).not.toMatch(
       /create table public\.coarse_location_labels[\s\S]*?(?:latitude|longitude)\s+(?:numeric|double|text)/iu,
+    );
+  });
+
+  it("stores only privacy-safe H3 cells and keeps map writes service-only", () => {
+    const mapTable = sql.match(
+      /create table public\.memory_map_cells[\s\S]*?\n\);/iu,
+    )?.[0];
+    expect(mapTable).toBeTruthy();
+    expect(mapTable).toMatch(/cell_id text not null/iu);
+    expect(mapTable).not.toMatch(
+      /\b(?:latitude|longitude)\s+(?:numeric|double|text)/iu,
+    );
+    expect(sql).toMatch(/state in \('passed','experienced','memory'\)/iu);
+    expect(sql).toMatch(/unique \(user_id, cell_id\)/iu);
+    expect(sql).toMatch(
+      /revoke all on function public\.reveal_memory_map_cell\(uuid,text\)[\s\S]*?grant execute on function public\.reveal_memory_map_cell\(uuid,text\)[\s\S]*?to service_role/iu,
+    );
+    expect(sql).not.toMatch(
+      /grant execute on function public\.reveal_memory_map_cell[^;]+to authenticated/iu,
     );
   });
 });

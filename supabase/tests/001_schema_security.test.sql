@@ -27,6 +27,8 @@ select has_table('public', 'ai_cost_reservations', 'ai_cost_reservations exists'
 select has_table('public', 'sequence_analysis_jobs', 'sequence_analysis_jobs exists');
 select has_table('public', 'search_feedback', 'search_feedback exists');
 select has_table('public', 'coarse_location_labels', 'coarse location label cache exists');
+select has_table('public', 'memory_map_cells', 'privacy-safe map cells exist');
+select has_table('public', 'memory_map_cell_memories', 'map Memory links exist');
 
 select ok(
   not exists (
@@ -37,7 +39,8 @@ select ok(
       ('claim_evidence'), ('user_corrections'), ('memory_context_dimensions'),
       ('memory_gaps'), ('memory_relations'), ('personal_context'), ('ai_runs'),
       ('ai_rate_limits'), ('ai_daily_budgets'), ('ai_cost_reservations'),
-      ('sequence_analysis_jobs'), ('search_feedback'), ('coarse_location_labels')
+      ('sequence_analysis_jobs'), ('search_feedback'), ('coarse_location_labels'),
+      ('memory_map_cells'), ('memory_map_cell_memories')
     ) required(table_name)
     left join pg_class table_class
       on table_class.relname = required.table_name
@@ -53,6 +56,9 @@ select hasnt_column('public', 'media_assets', 'latitude', 'exact latitude is abs
 select hasnt_column('public', 'media_assets', 'longitude', 'exact longitude is absent');
 select hasnt_column('public', 'media_assets', 'exact_lat', 'exact_lat is absent');
 select hasnt_column('public', 'media_assets', 'exact_lng', 'exact_lng is absent');
+select hasnt_column('public', 'memory_map_cells', 'latitude', 'map cell has no latitude');
+select hasnt_column('public', 'memory_map_cells', 'longitude', 'map cell has no longitude');
+select has_column('public', 'user_preferences', 'memory_map_enabled', 'Memory Map preference exists');
 select has_column('public', 'user_preferences', 'use_personal_context', 'personal context preference exists');
 select has_column('public', 'memory_gaps', 'target_claim_id', 'gap target claim exists');
 select has_column('public', 'memory_gaps', 'candidate_value_json', 'gap candidate value exists');
@@ -183,11 +189,29 @@ insert into public.evidence (
   'a0000000-0000-4000-8000-000000000001',
   'metadata_observation', 'time', '{"value":"2026-04-12"}', 'metadata'
 );
+insert into public.memory_map_cells (user_id, cell_id, state)
+values (
+  '10000000-0000-4000-8000-000000000001',
+  '8a2e6e82175ffff', 'passed'
+);
+insert into public.memory_map_cell_memories (user_id, cell_id, memory_id)
+values (
+  '10000000-0000-4000-8000-000000000001',
+  '8a2e6e82175ffff',
+  'b0000000-0000-4000-8000-000000000001'
+);
 
 set local role authenticated;
 set local request.jwt.claim.sub = '20000000-0000-4000-8000-000000000002';
 select is((select count(*)::integer from public.memories), 0, 'user B cannot read user A memory');
 select is((select count(*)::integer from public.evidence), 0, 'user B cannot read user A evidence');
+select is((select count(*)::integer from public.memory_map_cells), 0, 'user B cannot read user A map cells');
+select throws_ok(
+  $$insert into public.memory_map_cells (user_id, cell_id)
+    values ('20000000-0000-4000-8000-000000000002', '8a2e6e82175ffff')$$,
+  '42501', 'permission denied for table memory_map_cells',
+  'browser role cannot mutate map cells'
+);
 select is(
   has_function_privilege(
     'authenticated',
@@ -210,8 +234,29 @@ select throws_ok(
 
 set local request.jwt.claim.sub = '10000000-0000-4000-8000-000000000001';
 select is((select count(*)::integer from public.memories), 1, 'owner can read own memory');
+select is((select count(*)::integer from public.memory_map_cells), 1, 'owner can read own map cell');
 reset role;
 set local role service_role;
+select lives_ok(
+  $$select public.reveal_memory_map_cell(
+    '10000000-0000-4000-8000-000000000001', '8a2e6e82175ffff'
+  )$$,
+  'service route can reveal an owner-scoped cell'
+);
+select is(
+  (select visit_count from public.memory_map_cells
+   where user_id = '10000000-0000-4000-8000-000000000001'
+     and cell_id = '8a2e6e82175ffff'),
+  2,
+  'repeated reveal updates one row instead of creating a duplicate'
+);
+select is(
+  (select state from public.memory_map_cells
+   where user_id = '10000000-0000-4000-8000-000000000001'
+     and cell_id = '8a2e6e82175ffff'),
+  'memory',
+  'a passed reveal never downgrades a Memory cell'
+);
 select lives_ok(
   $$select public.enqueue_sequence_analysis_job(
       '10000000-0000-4000-8000-000000000001',

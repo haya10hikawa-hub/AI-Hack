@@ -10,6 +10,7 @@ import {
 } from "@/src/server/ai";
 import { collectGroundedFacts } from "@/src/domain/grounded-answer";
 import { JsonValueSchema } from "@/src/domain/json";
+import { isAllowedMemoryMapCell } from "@/src/domain/memory-map";
 import { selectSearchCandidates } from "@/src/domain/search";
 import { assertSameOrigin, requestId } from "@/src/server/http/security";
 import { dataResponse, routeError } from "@/src/server/http/responses";
@@ -24,11 +25,14 @@ import {
 import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
-const SearchRequestSchema = z.object({
-  query: z.string().trim().min(1).max(500),
-  timezone: z.string().min(1).max(80).default("Asia/Tokyo"),
-  currentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
-});
+const SearchRequestSchema = z
+  .object({
+    query: z.string().trim().min(1).max(500),
+    timezone: z.string().min(1).max(80).default("Asia/Tokyo"),
+    currentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    cellId: z.string().trim().refine(isAllowedMemoryMapCell).optional(),
+  })
+  .strict();
 
 const StoredClaimSchema = z.object({
   id: z.string().uuid(),
@@ -75,6 +79,52 @@ export async function POST(request: NextRequest) {
     const { user, supabase } = await requireAuthenticatedUser();
     const database = createSupabaseAdminClient();
     auditContext = { database, userId: user.id };
+    let mapMemoryIds: string[] | null = null;
+    if (input.cellId !== undefined) {
+      const ownedCell = await supabase
+        .from("memory_map_cells")
+        .select("cell_id")
+        .eq("user_id", user.id)
+        .eq("cell_id", input.cellId)
+        .maybeSingle();
+      if (ownedCell.error !== null)
+        throw new RepositoryError("verify_search_map_cell");
+      if (ownedCell.data !== null) {
+        const linkResult = await supabase
+          .from("memory_map_cell_memories")
+          .select("memory_id")
+          .eq("user_id", user.id)
+          .eq("cell_id", input.cellId);
+        if (linkResult.error !== null)
+          throw new RepositoryError("load_search_map_memories");
+        mapMemoryIds = (linkResult.data ?? []).flatMap((row) =>
+          typeof row.memory_id === "string" ? [row.memory_id] : [],
+        );
+      } else {
+        mapMemoryIds = [];
+      }
+    }
+    if (mapMemoryIds?.length === 0) {
+      const thread = await getMemoryThread(supabase, user.id);
+      return dataResponse({
+        interpretation: {
+          time: null,
+          place: null,
+          people: [],
+          activities: [],
+          keywords: [],
+        },
+        answer: null,
+        answerState: "unknown",
+        candidates: [],
+        sources: [],
+        clarification: null,
+        partial: thread.partial ?? false,
+        partialMessage: thread.partialMessage ?? null,
+        feedbackEnabled: false,
+      });
+    }
+
     const provider = createAIProviderFromEnv({
       rateLimitStore: new SupabaseRateLimitStore(database, user.id),
       costLedger: new SupabaseAICostLedger(database, user.id),
@@ -136,7 +186,7 @@ export async function POST(request: NextRequest) {
     });
     await persistAIRun(database, user.id, parsed.run);
 
-    const memoryResult = await supabase
+    let memoryQuery = supabase
       .from("memories")
       .select(
         "id,title,summary,status,event_id,event:events(id,started_at,coarse_place),claims(id,field,value_json,status,origin,confidence_band,confirmation_status,ai_run_id,source_correction_id,created_at,updated_at,claim_evidence(evidence_id))",
@@ -144,6 +194,15 @@ export async function POST(request: NextRequest) {
       .eq("user_id", user.id)
       .eq("status", "active")
       .limit(100);
+    if (mapMemoryIds !== null) {
+      memoryQuery = memoryQuery.in(
+        "id",
+        mapMemoryIds.length > 0
+          ? mapMemoryIds
+          : ["00000000-0000-0000-0000-000000000000"],
+      );
+    }
+    const memoryResult = await memoryQuery;
     if (memoryResult.error !== null)
       throw new RepositoryError("retrieve_memory_candidates");
     const candidates = (memoryResult.data ?? []).map((row) =>
@@ -151,6 +210,7 @@ export async function POST(request: NextRequest) {
         row,
         parsed.data,
         feedbackByMemoryId.get(String(row.id)) ?? null,
+        mapMemoryIds !== null,
       ),
     );
     const eligible = candidates.filter(
@@ -385,6 +445,7 @@ function scoreCandidate(
   row: Record<string, unknown>,
   query: Parsed,
   feedback: "helpful" | "not_helpful" | null,
+  locationScoped: boolean,
 ) {
   const eventValue = Array.isArray(row.event) ? row.event[0] : row.event;
   const event = (eventValue ?? {}) as Record<string, unknown>;
@@ -420,6 +481,10 @@ function scoreCandidate(
     .toLocaleLowerCase();
   let score = 0;
   const reasons: string[] = [];
+  if (locationScoped) {
+    score = 0.55;
+    reasons.push("Memory Mapで選んだ地域");
+  }
   const terms = [...query.activities, ...query.keywords, ...query.people];
   const matchedTerms = terms.filter((term) =>
     haystack.includes(term.normalize("NFKC").toLocaleLowerCase()),

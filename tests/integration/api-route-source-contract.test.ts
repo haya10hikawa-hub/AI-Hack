@@ -21,6 +21,7 @@ const analysisPipeline = routeSource(
 );
 const search = routeSource("app/api/search/route.ts");
 const health = routeSource("app/api/health/route.ts");
+const memoryMap = routeSource("app/api/map/route.ts");
 
 describe("API route implementation contracts", () => {
   it("confirms a gap through the gap-aware atomic RPC", () => {
@@ -146,5 +147,32 @@ describe("API route implementation contracts", () => {
     ]) {
       expect(health).toContain(`process.env.${name}`);
     }
+  });
+
+  it("accepts only privacy-safe Map cells and scopes every mutation to the session owner", () => {
+    expect(memoryMap).toMatch(/\.strict\(\)/u);
+    expect(memoryMap).toMatch(/refine\(isAllowedMemoryMapCell\)/u);
+    expect(memoryMap).toMatch(/assertSameOrigin\(request\)/u);
+    expect(memoryMap).toMatch(/requireAuthenticatedUser\(\)/u);
+    expect(memoryMap).toMatch(
+      /p_user_id:\s*user\.id,[\s\S]*?p_cell_id:\s*input\.cellId/u,
+    );
+    expect(memoryMap).toMatch(
+      /\.delete\(\)[\s\S]*?\.eq\("user_id", user\.id\)/u,
+    );
+    expect(memoryMap).not.toMatch(/input\.(?:latitude|longitude)/u);
+  });
+
+  it("uses an owned Map cell as a deterministic Search candidate scope", () => {
+    expect(search).toMatch(/refine\(isAllowedMemoryMapCell\)/u);
+    expect(search).toMatch(
+      /from\("memory_map_cells"\)[\s\S]*?\.eq\("user_id", user\.id\)[\s\S]*?\.eq\("cell_id", input\.cellId\)/u,
+    );
+    expect(search).toMatch(
+      /from\("memory_map_cell_memories"\)[\s\S]*?\.eq\("user_id", user\.id\)[\s\S]*?\.eq\("cell_id", input\.cellId\)/u,
+    );
+    expect(search).toMatch(/memoryQuery\.in\(\s*"id"/u);
+    expect(search).not.toMatch(/userId:\s*input/u);
+    expect(search).not.toMatch(/(?:latitude|longitude).*input\./u);
   });
 });

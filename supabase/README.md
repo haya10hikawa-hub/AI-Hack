@@ -23,6 +23,16 @@ Run dependency-free static checks even when PostgreSQL/Docker is unavailable:
 node supabase/tests/static-schema.test.mjs
 ```
 
+## Prepare the local Memory Map demo
+
+After local Supabase is running and migrations are applied, prepare the fixed recording account with:
+
+```bash
+pnpm demo:map:seed
+```
+
+The command reads credentials only from `supabase status`, refuses every API URL except local port `54321`, and recreates only `memory-map-demo@local.rememory.test`. It inserts one Passed, one Experienced, and two Memory cells plus two schema-valid, evidence-linked Memories. Re-running it is the cleanup/reset path. It never changes `seed.sql`, never targets a hosted project, and does not enable demo behavior in the production app.
+
 ## Storage contract
 
 `rememory-private` is never public. The only accepted object names are:
