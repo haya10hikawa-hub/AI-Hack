@@ -12,6 +12,9 @@ function routeSource(relativePath: string): string {
 const gapConfirm = routeSource("app/api/gaps/[id]/confirm/route.ts");
 const deletion = routeSource("app/api/memories/[id]/delete/route.ts");
 const upload = routeSource("app/api/upload/route.ts");
+const analysisJobs = routeSource("src/server/services/analysis-jobs.ts");
+const analysisWorker = routeSource("app/api/internal/analysis-worker/route.ts");
+const analysisResume = routeSource("app/api/analysis/process/route.ts");
 const search = routeSource("app/api/search/route.ts");
 
 describe("API route implementation contracts", () => {
@@ -49,23 +52,57 @@ describe("API route implementation contracts", () => {
     );
   });
 
-  it("schedules background analysis and records a terminal state after taking a lease", () => {
-    const lease = upload.indexOf('database.rpc("claim_sequence_analysis"');
-    const analysis = upload.indexOf("await analyzePersistedSequence(");
-    const complete = upload.indexOf('p_status: "complete"');
-    const failed = upload.indexOf('p_status: "failed"');
+  it("persists analysis work before responding and leaves after as a fast-path", () => {
+    const enqueue = upload.indexOf("await enqueueSequenceAnalysisJobs(");
+    const backgroundKick = upload.indexOf("after(() =>");
+    const response = upload.indexOf("return dataResponse({");
 
-    expect(lease).toBeGreaterThan(-1);
-    expect(analysis).toBeGreaterThan(lease);
-    expect(complete).toBeGreaterThan(analysis);
-    expect(failed).toBeGreaterThan(complete);
+    expect(enqueue).toBeGreaterThan(-1);
+    expect(backgroundKick).toBeGreaterThan(enqueue);
+    expect(response).toBeGreaterThan(backgroundKick);
     expect(upload).toMatch(
-      /after\(\(\) =>\s*processSequences\(\{[\s\S]*?sequences:\s*result\.sequences/u,
+      /await enqueueSequenceAnalysisJobs\(\{[\s\S]*?sequences:\s*result\.sequences/u,
     );
     expect(upload).toMatch(
-      /lease\.error !== null \|\| lease\.data !== true\) return;[\s\S]*?try \{[\s\S]*?p_status:\s*"complete"[\s\S]*?catch[\s\S]*?p_status:\s*"failed"/u,
+      /after\(\(\) =>\s*processAnalysisJobs\(\{[\s\S]*?maxJobs:\s*1/u,
     );
     expect(upload).toMatch(/processingState:\s*result\.processingState/u);
+  });
+
+  it("claims, heartbeats, and finishes durable jobs through server-only RPCs", () => {
+    const claim = analysisJobs.indexOf(
+      'database.rpc("claim_sequence_analysis_job"',
+    );
+    const analysis = analysisJobs.indexOf("await analyzePersistedSequence(");
+    const heartbeat = analysisJobs.indexOf(
+      'database.rpc("touch_sequence_analysis_job"',
+    );
+    const finish = analysisJobs.indexOf(
+      'database.rpc("finish_sequence_analysis_job"',
+    );
+
+    expect(claim).toBeGreaterThan(-1);
+    expect(analysis).toBeGreaterThan(claim);
+    expect(heartbeat).toBeGreaterThan(analysis);
+    expect(finish).toBeGreaterThan(heartbeat);
+    expect(analysisJobs).toMatch(
+      /retryDelaySeconds\(input\.job\.attemptCount\)/u,
+    );
+    expect(analysisJobs).toMatch(/download\(asset\.derivative_storage_key\)/u);
+  });
+
+  it("protects the scheduled worker with a server-only bearer secret", () => {
+    expect(analysisWorker).toMatch(/process\.env\.CRON_SECRET/u);
+    expect(analysisWorker).toMatch(/timingSafeEqual/u);
+    expect(analysisWorker).toMatch(/await processAnalysisJobs\(/u);
+    expect(analysisWorker).not.toMatch(/requireAuthenticatedUser/u);
+  });
+
+  it("scopes interactive job recovery to the verified session owner", () => {
+    expect(analysisResume).toMatch(/assertSameOrigin\(request\)/u);
+    expect(analysisResume).toMatch(/requireAuthenticatedUser\(\)/u);
+    expect(analysisResume).toMatch(/userId:\s*user\.id/u);
+    expect(analysisResume).not.toMatch(/request\.json\(\)/u);
   });
 
   it("grounds displayed search sources in claim ids selected by the answer", () => {

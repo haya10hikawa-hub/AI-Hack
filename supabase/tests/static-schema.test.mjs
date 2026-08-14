@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
-const migration = readFileSync(
-  new URL("../migrations/202608130001_initial_rememory.sql", import.meta.url),
-  "utf8",
-);
+const migrationDirectory = new URL("../migrations/", import.meta.url);
+const migration = readdirSync(migrationDirectory)
+  .filter((name) => name.endsWith(".sql"))
+  .sort()
+  .map((name) => readFileSync(new URL(name, migrationDirectory), "utf8"))
+  .join("\n");
 
 const privateTables = [
   "profiles",
@@ -26,6 +28,7 @@ const privateTables = [
   "ai_rate_limits",
   "ai_daily_budgets",
   "ai_cost_reservations",
+  "sequence_analysis_jobs",
 ];
 
 for (const table of privateTables) {
@@ -63,6 +66,12 @@ assert.match(migration, /create policy rememory_storage_select_own/);
 assert.doesNotMatch(
   migration,
   /create policy rememory_storage_(?:insert|update|delete)_own/,
+);
+assert.match(migration, /create table public\.sequence_analysis_jobs/);
+assert.match(migration, /for update skip locked/);
+assert.match(
+  migration,
+  /grant execute on function public\.claim_sequence_analysis_job\([^)]+\)\s+to service_role/,
 );
 assert.match(migration, /values \(\s*'rememory-private',[\s\S]*?false,/);
 assert.match(

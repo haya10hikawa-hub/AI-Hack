@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, ImagePlus, Search } from "lucide-react";
 
 import { AppShell } from "./app-shell";
+import { apiRequest } from "./api-client";
 import { MemoryThread } from "./memory-thread";
 import { InlineNotice, StateView } from "./state-view";
 import type { MemoryThreadItem, MemoryThreadPayload } from "./types";
@@ -25,6 +26,7 @@ export function HomeScreen() {
   const resource = useApiResource<MemoryThreadPayload | MemoryThreadItem[]>(
     "/api/memories?view=thread",
   );
+  const reload = resource.reload;
   const data = normalizeThread(resource.data);
   const isProcessing =
     data?.memories.some(
@@ -33,9 +35,19 @@ export function HomeScreen() {
 
   useEffect(() => {
     if (!isProcessing) return;
-    const timer = window.setTimeout(resource.reload, 4_000);
-    return () => window.clearTimeout(timer);
-  }, [isProcessing, resource.reload, resource.data]);
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void apiRequest("/api/analysis/process", { method: "POST" })
+        .catch(() => undefined)
+        .finally(() => {
+          if (active) reload();
+        });
+    }, 4_000);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [isProcessing, reload, resource.data]);
 
   return (
     <AppShell>
