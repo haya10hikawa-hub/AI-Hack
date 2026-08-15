@@ -142,8 +142,7 @@ export async function analyzePersistedSequence(input: {
             value,
           ),
           observed_at: null,
-          validity:
-            facet.confidenceBand === "low" ? "uncertain" : "valid",
+          validity: facet.confidenceBand === "low" ? "uncertain" : "valid",
         };
       }),
     );
