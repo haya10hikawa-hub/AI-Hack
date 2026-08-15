@@ -9,6 +9,6 @@ struct SupportingPhotoGrid: View {
             ForEach(photos) { photo in
                 RemotePhoto(photo: photo).aspectRatio(1, contentMode: .fill).clipShape(RoundedRectangle(cornerRadius: 3))
             }
-        }.padding(10).background(.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
+        }
     }
 }
