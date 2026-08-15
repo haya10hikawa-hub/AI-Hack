@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 
 enum PreviewFixtures {
@@ -12,8 +13,10 @@ enum PreviewFixtures {
     /// Lets a fixture launch land directly on any of the five signature screens without tap injection.
     enum Route: String {
         case stacks, memory, grid, confirm, recallStrong = "recall-strong", recallAmbiguous = "recall-ambiguous"
+        case map
 
         var isRecall: Bool { self == .recallStrong || self == .recallAmbiguous }
+        var isMap: Bool { self == .map }
     }
 
     static var route: Route? {
@@ -120,6 +123,31 @@ enum PreviewFixtures {
             return RecallPresentation(answerState: .unknown, clarification: "この記憶はまだ見つけられませんでした。")
         }
         return RecallPresentation(answerState: .strong, candidates: [memory])
+    }
+
+    // MARK: - Map
+
+    /// Coarse cell centres, the same thing the server derives from an H3 cell.
+    static let mapClusters: [MemoryMapClusterPresentation] = [
+        cluster("8a3095a4f0affff", "徳島県 鳴門", 34.2380, 134.5560, ["museum-day", "spring-frescoes"]),
+        cluster("8a3095a4f0b7fff", "徳島県 鳴門", 34.2398, 134.5578, ["lily-water", "shore-walk"]),
+        cluster("8a3095b1a54ffff", "工房", 34.0703, 134.5548, ["robot-afternoon", "workshop-night", "spring-table"]),
+        cluster("8a3095b1a56ffff", "河川敷", 34.0790, 134.5410, ["green-field", "tent-afternoon"]),
+        cluster("8a3095b1a44ffff", "会場", 34.0745, 134.5595, ["festival-night"]),
+        cluster("8a3095b1a40ffff", "喫茶店", 34.0690, 134.5500, ["morning-window"]),
+        cluster("8a3095b1a42ffff", "自室", 34.0710, 134.5530, ["fan-visitor"]),
+        cluster("8a2f5a2c8a0ffff", "神奈川県", 35.3080, 139.4830, ["spring-shore"])
+    ]
+
+    private static func cluster(_ cellId: String, _ place: String, _ latitude: Double, _ longitude: Double,
+                                _ memoryIDs: [String]) -> MemoryMapClusterPresentation {
+        let memories = memoryIDs.compactMap(memory)
+        return MemoryMapClusterPresentation(
+            id: cellId, cellIDs: [cellId],
+            coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude), coarsePlace: place,
+            state: .memory, memoryCount: memories.count, memories: memories,
+            representativePhoto: memories.first?.heroPhotos.first
+        )
     }
 
     // MARK: - Builders

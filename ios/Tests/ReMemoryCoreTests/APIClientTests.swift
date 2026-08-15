@@ -17,6 +17,9 @@ final class APIClientTests: XCTestCase {
             else { _ = try await client.get(endpoint, as: MemoryDetailDTO.self) }
         }
 
+        MockURLProtocol.responder = response(method: "GET", path: "/api/map", fixture: Fixtures.map)
+        _ = try await makeClient().get(.map, as: MemoryMapDTO.self)
+
         MockURLProtocol.responder = response(method: "POST", path: "/api/gaps/\(Fixtures.gapId)/confirm", fixture: Fixtures.confirmResult, bodyKey: "decision")
         _ = try await makeClient().post(.confirm(Fixtures.gapId), body: ConfirmationDecisionDTO.confirm, as: ConfirmationResultDTO.self)
 
