@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Re:Memory">
-  <rect width="64" height="64" rx="14" fill="#F7F3EA"/>
-  <path d="M20 17v30" stroke="#3D3A78" stroke-width="6" stroke-linecap="round"/>
-  <path d="M20 18h12c7 0 11 4 11 10s-4 10-11 10H20" fill="none" stroke="#3D3A78" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="m34 38 11 10" stroke="#3D3A78" stroke-width="6" stroke-linecap="round"/>
-  <circle cx="52" cy="23" r="4" fill="#B24A3E"/>
-  <circle cx="52" cy="41" r="4" fill="#5A7358"/>
-</svg>

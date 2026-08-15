@@ -9,6 +9,8 @@ export const AIModelConfigSchema = z
     outputUsdPerMillionTokens: z.number().nonnegative().max(10_000),
     imageUsdEach: z.number().nonnegative().max(100),
     maxOutputTokens: z.number().int().positive().max(32_000),
+    /** Optional per-role endpoint override (e.g. a local model for one role). */
+    baseUrl: z.url().optional(),
   })
   .strict();
 

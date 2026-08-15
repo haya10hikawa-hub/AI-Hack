@@ -30,7 +30,7 @@ export function systemPromptFor(
     `Output schema version: ${schemaVersion}.`,
     outputJsonSchema === undefined
       ? ""
-      : `Your JSON must conform exactly to this output schema:\n${outputJsonSchema}`,
+      : `Respond with a single JSON object that is an INSTANCE of this schema — fill in real values. Never echo the schema itself and never include the keys "$schema", "type", "properties", "required", "items", or "additionalProperties".\n${outputJsonSchema}`,
   ].join("\n\n");
 }
 

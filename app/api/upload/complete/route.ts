@@ -111,7 +111,11 @@ export async function POST(request: NextRequest) {
           database,
           requestId: id,
           userId: user.id,
-          maxJobs: 1,
+          // Process up to 4 stages so a single upload can drive the whole
+          // analysis -> claims -> gap pipeline to completion. In local/dev
+          // there is no cron worker, so this keeps memories from stalling at
+          // "processing"; the periodic worker still handles retries/backlog.
+          maxJobs: 4,
         }).catch(() => undefined),
       );
     }

@@ -12,6 +12,7 @@ struct MemoryView: View {
     @State private var acknowledged = false
     @State private var sidesRevealed = false
     @State private var contextRevealed = false
+    @State private var uncertainPrompt: UncertainPhotoPresentation?
     private let memoryId: String
     private let transitionNamespace: Namespace.ID
     private let transitionEnabled: Bool
@@ -38,6 +39,9 @@ struct MemoryView: View {
         .toolbar(showingGrid ? .hidden : .visible, for: .navigationBar)
         .memoryNavigationTransition(id: memoryId, in: transitionNamespace, enabled: transitionEnabled)
         .overlay { gridOverlay }
+        .sheet(item: $uncertainPrompt) { prompt in
+            UncertainPhotoPrompt(prompt: prompt) { uncertainPrompt = nil }
+        }
         .task {
             if !PreviewFixtures.isEnabled { await model.load() }
             if let route = PreviewFixtures.route {
@@ -83,6 +87,20 @@ struct MemoryView: View {
                 .padding(.bottom, 10)
                 .opacity(contextRevealed ? 1 : 0)
                 .animation(contextArrival, value: contextRevealed)
+
+            if !memory.uncertainPhotos.isEmpty {
+                Button { uncertainPrompt = memory.uncertainPhotos.first } label: {
+                    Label("この写真について確認したい", systemImage: "questionmark.circle")
+                        .font(.footnote.weight(.medium))
+                        .padding(.vertical, 7)
+                        .padding(.horizontal, 13)
+                        .background(.regularMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 10)
+                .opacity(contextRevealed ? 1 : 0)
+                .animation(contextArrival, value: contextRevealed)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(MemoryDepth.canvas)

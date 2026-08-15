@@ -115,6 +115,7 @@ export const EventClaimsInputSchema = z
               "ai_observation",
               "location",
               "system",
+              "user_statement",
             ]),
           })
           .strict(),
@@ -163,6 +164,7 @@ export const GapDetectionInputSchema = z
               "ai_observation",
               "location",
               "system",
+              "user_statement",
             ]),
           })
           .strict(),

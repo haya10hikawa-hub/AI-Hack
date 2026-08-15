@@ -25,6 +25,13 @@ enum PresentationMapper {
         let supporting = detail.evidence.filter { $0.kind == "photo" }.map {
             MemoryPhotoPresentation(id: $0.id, temporaryURL: $0.imageUrl.flatMap(URL.init(string:)), alt: $0.detail ?? detail.memory.title)
         }
+        let uncertain = detail.evidence.filter { $0.kind == "photo" && $0.uncertainty != nil }.map { entry in
+            UncertainPhotoPresentation(
+                id: entry.id,
+                photo: MemoryPhotoPresentation(id: entry.id, temporaryURL: entry.imageUrl.flatMap(URL.init(string:)), alt: entry.detail ?? detail.memory.title),
+                question: entry.uncertainty ?? "この写真の内容を確認できますか？"
+            )
+        }
         let related = (detail.relatedMemories ?? []).map { item in
             RelatedMemoryPresentation(id: item.memoryId, title: item.title, date: item.capturedAt.flatMap(iso.date),
                 photo: item.representativeImageUrl.map { MemoryPhotoPresentation(id: "\(item.memoryId)-representative", temporaryURL: URL(string: $0), alt: item.title) })
@@ -35,7 +42,7 @@ enum PresentationMapper {
             photoCount: detail.memory.photoCount, status: status(detail.memory.processingState),
             needsConfirmation: detail.memory.hasOpenGap ?? false, heroPhotos: Array(photos.prefix(3)),
             memoryContent: detail.claims.map { MemoryContentPresentation(id: $0.id, text: $0.text) },
-            supportingPhotos: supporting, relatedMemories: related
+            supportingPhotos: supporting, relatedMemories: related, uncertainPhotos: uncertain
         )
     }
 

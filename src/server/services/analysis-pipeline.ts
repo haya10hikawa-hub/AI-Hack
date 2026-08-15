@@ -6,7 +6,10 @@ import {
   assessContextCompleteness,
   evaluateMemoryGapGate,
 } from "@/src/domain/memory-assessment";
-import { describeEventSemantics } from "@/src/domain/event-semantics";
+import {
+  describeEventSemantics,
+  type AssetSemanticRepresentation,
+} from "@/src/domain/event-semantics";
 import { distillMemoryRepresentatives } from "@/src/domain/memory-distillation";
 import {
   SupabaseAICostLedger,
@@ -117,13 +120,23 @@ export async function analyzePersistedSequence(input: {
     const semanticsByAsset = new Map(
       semantics.map((semantic) => [semantic.assetId, semantic]),
     );
+    const corroboration = corroborationCounts(semantics);
     const presentation = describeEventSemantics(semantics);
     const evidenceRows = semantics.flatMap((semantic) =>
       semantic.facets.map((facet) => {
+        const corroborated = (corroboration.get(facetKey(facet)) ?? 0) >= 2;
+        // A facet seen across multiple photos is stronger evidence than a
+        // single-photo glimpse: treat a corroborated low-confidence guess as
+        // medium confidence rather than discarding it as uncertain.
+        const confidenceBand =
+          corroborated && facet.confidenceBand === "low"
+            ? ("medium" as const)
+            : facet.confidenceBand;
         const value = {
           value: facet.value,
-          confidenceBand: facet.confidenceBand,
+          confidenceBand,
           uncertainty: facet.uncertainty,
+          corroborated,
         };
         return {
           id: crypto.randomUUID(),
@@ -142,7 +155,7 @@ export async function analyzePersistedSequence(input: {
             value,
           ),
           observed_at: null,
-          validity: facet.confidenceBand === "low" ? "uncertain" : "valid",
+          validity: confidenceBand === "low" ? "uncertain" : "valid",
         };
       }),
     );
@@ -216,6 +229,7 @@ export async function analyzePersistedSequence(input: {
     "ai_observation",
     "location",
     "system",
+    "user_statement",
   ]);
   const claimInputEvidence = (allEvidenceResult.data ?? [])
     .filter(({ source_type }) => allowedSourceTypes.has(source_type))
@@ -227,7 +241,8 @@ export async function analyzePersistedSequence(input: {
         | "metadata"
         | "ai_observation"
         | "location"
-        | "system",
+        | "system"
+        | "user_statement",
     }));
   if (resumeFrom !== "gap") {
     const generated = await provider.generateEventClaims(context, {
@@ -500,4 +515,25 @@ function stablePipelineKey(
     0,
     200,
   );
+}
+
+/** Counts how many distinct assets observed each normalized (type, value) facet. */
+function corroborationCounts(
+  semantics: readonly AssetSemanticRepresentation[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const semantic of semantics) {
+    const seen = new Set<string>();
+    for (const facet of semantic.facets) {
+      const key = facetKey(facet);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function facetKey(facet: { type: string; value: string }): string {
+  return `${facet.type}\0${facet.value.toLocaleLowerCase("en-US")}`;
 }
