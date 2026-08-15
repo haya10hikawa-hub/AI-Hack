@@ -3,11 +3,18 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { cookies } from "next/headers";
+import type { NextRequest } from "next/server";
 import type { User } from "@supabase/supabase-js";
 
 import { requireSupabaseAdminConfig } from "@/src/server/config";
 import {
+  BearerTokenError,
+  readBearerToken,
+  type RequestAuthMode,
+} from "@/src/server/http/security";
+import {
   createSupabaseAdminClient,
+  createSupabaseBearerClient,
   createSupabaseServerClient,
 } from "@/src/server/supabase/client";
 
@@ -73,17 +80,63 @@ function parsePreviewCookie(value: string | undefined): string | null {
   return userId;
 }
 
+type RequestSupabaseClient =
+  | Awaited<ReturnType<typeof createSupabaseServerClient>>
+  | ReturnType<typeof createSupabaseAdminClient>
+  | ReturnType<typeof createSupabaseBearerClient>;
+
+export interface RequestAuthContext {
+  user: User;
+  supabase: RequestSupabaseClient;
+  mode: RequestAuthMode;
+}
+
+/**
+ * Single entry point for route handlers. An Authorization header selects the
+ * native path and is verified against the auth server; anything else keeps the
+ * existing browser behaviour (cookie session, then Public Preview).
+ *
+ * A rejected token never degrades into a browser identity: it throws, and the
+ * route answers 401.
+ */
+export async function resolveRequestAuth(
+  request: NextRequest,
+): Promise<RequestAuthContext> {
+  const accessToken = readBearerToken(request);
+  return accessToken === null
+    ? browserAuth()
+    : authenticateAccessToken(accessToken);
+}
+
+/**
+ * Verifies the token server side. `getUser(token)` asks the auth server to
+ * resolve the identity, so an expired, revoked, or forged token cannot pass,
+ * and the identity comes from the token rather than from the request body.
+ */
+async function authenticateAccessToken(
+  accessToken: string,
+): Promise<RequestAuthContext> {
+  const supabase = createSupabaseBearerClient(accessToken);
+  const { data, error } = await supabase.auth.getUser(accessToken);
+  if (error !== null || data.user === null) throw new BearerTokenError();
+  return { user: data.user, supabase, mode: "bearer" };
+}
+
 export async function requireAuthenticatedUser(): Promise<{
   user: User;
-  supabase:
-    | Awaited<ReturnType<typeof createSupabaseServerClient>>
-    | ReturnType<typeof createSupabaseAdminClient>;
+  supabase: RequestSupabaseClient;
 }> {
+  const { user, supabase } = await browserAuth();
+  return { user, supabase };
+}
+
+async function browserAuth(): Promise<RequestAuthContext> {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();
   if (error === null && data.user !== null)
-    return { user: data.user, supabase };
-  return createPublicPreviewUser();
+    return { user: data.user, supabase, mode: "cookie" };
+  const preview = await createPublicPreviewUser();
+  return { ...preview, mode: "preview" };
 }
 
 async function createPublicPreviewUser(): Promise<{

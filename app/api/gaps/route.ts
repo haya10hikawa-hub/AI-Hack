@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requestId } from "@/src/server/http/security";
 import { dataResponse, routeError } from "@/src/server/http/responses";
 import { RepositoryError } from "@/src/server/services/memories";
-import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
+import { resolveRequestAuth } from "@/src/server/supabase/auth";
 
 const GapRowSchema = z.object({
   id: z.string().uuid(),
@@ -56,7 +56,7 @@ function candidateText(value: unknown): string | null {
 export async function GET(request: NextRequest) {
   const id = requestId(request);
   try {
-    const { user, supabase } = await requireAuthenticatedUser();
+    const { user, supabase } = await resolveRequestAuth(request);
     const now = new Date().toISOString();
     const { data, error } = await supabase
       .from("memory_gaps")

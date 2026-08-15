@@ -18,7 +18,7 @@ import {
   type AssetSemanticRepresentation,
 } from "@/src/domain/event-semantics";
 import { selectSearchCandidates } from "@/src/domain/search";
-import { assertSameOrigin, requestId } from "@/src/server/http/security";
+import { assertMutationAllowed, requestId } from "@/src/server/http/security";
 import { dataResponse, routeError } from "@/src/server/http/responses";
 import {
   getMemoryThread,
@@ -28,7 +28,7 @@ import {
   normalizeSearchFeedbackQuery,
   searchFeedbackQueryHash,
 } from "@/src/server/services/search-feedback";
-import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
+import { resolveRequestAuth } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
 const SearchRequestSchema = z
@@ -93,9 +93,9 @@ export async function POST(request: NextRequest) {
       }
     | undefined;
   try {
-    assertSameOrigin(request);
+    assertMutationAllowed(request);
     const input = SearchRequestSchema.parse(await request.json());
-    const { user, supabase } = await requireAuthenticatedUser();
+    const { user, supabase } = await resolveRequestAuth(request);
     const database = createSupabaseAdminClient();
     auditContext = { database, userId: user.id };
     let mapMemoryIds: string[] | null = null;

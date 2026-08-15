@@ -21,6 +21,8 @@ vi.mock("@/src/server/supabase/auth", () => {
   return {
     AuthenticationError,
     requireAuthenticatedUser: mocks.requireAuthenticatedUser,
+    // Search resolves the same identity through the request-aware entry point.
+    resolveRequestAuth: mocks.requireAuthenticatedUser,
   };
 });
 

@@ -8,7 +8,7 @@ import {
   routeError,
 } from "@/src/server/http/responses";
 import { getMemoryDetail } from "@/src/server/services/memories";
-import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
+import { resolveRequestAuth } from "@/src/server/supabase/auth";
 
 export async function GET(
   request: NextRequest,
@@ -17,7 +17,7 @@ export async function GET(
   const id = requestId(request);
   try {
     const memoryId = z.uuid().parse((await context.params).id);
-    const { user, supabase } = await requireAuthenticatedUser();
+    const { user, supabase } = await resolveRequestAuth(request);
     const detail = await getMemoryDetail(supabase, user.id, memoryId);
     return detail === null
       ? errorResponse(404, "MEMORY_NOT_FOUND", "Memoryが見つかりません。", id)
