@@ -102,6 +102,55 @@ describe("OrcaRouterProvider failure boundaries", () => {
     expect(ledger.getSpent("user-a", utcDay())).toBeGreaterThan(0);
   });
 
+  it("retries only an invalid Vision semantic output within the existing bound", async () => {
+    const invalid = sequenceOutput([
+      {
+        assetId: "asset-1",
+        field: "purpose",
+        value: "practice",
+        confidenceBand: "high",
+        uncertainty: null,
+      },
+    ]);
+    const valid = sequenceOutput([
+      {
+        assetId: "asset-1",
+        field: "activity",
+        value: "assembling",
+        confidenceBand: "high",
+        uncertainty: null,
+      },
+    ]);
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(completionResponse(invalid))
+      .mockResolvedValueOnce(completionResponse(valid));
+    const provider = providerWith(
+      fetchImplementation,
+      new InMemoryAICostLedger(),
+      0,
+    );
+    const image =
+      "UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAUAmJaQAA3AA/vz0AAA=";
+
+    const result = await provider.analyzeSequence(context, {
+      sequenceId: "sequence-a",
+      assets: [1, 2, 3].map((number) => ({
+        assetId: `asset-${number}`,
+        mimeType: "image/webp" as const,
+        derivativeBase64: image,
+        width: 1,
+        height: 1,
+        capturedAt: null,
+        coarsePlace: null,
+      })),
+    });
+
+    expect(fetchImplementation).toHaveBeenCalledTimes(2);
+    expect(result.run.retryCount).toBe(1);
+    expect(result.data.observations).toHaveLength(1);
+  });
+
   it("counts retry attempts against the rate gate and fails closed", async () => {
     const ledger = new InMemoryAICostLedger();
     const fetchImplementation = vi
@@ -278,6 +327,7 @@ describe("grounding postconditions", () => {
 function providerWith(
   fetchImplementation: typeof fetch,
   ledger: InMemoryAICostLedger,
+  maxRetries = 1,
 ) {
   return new OrcaRouterProvider({
     apiKey: "test-key",
@@ -292,7 +342,7 @@ function providerWith(
       ledger,
     ),
     fetchImplementation,
-    maxRetries: 1,
+    maxRetries,
   });
 }
 
@@ -311,6 +361,12 @@ function completionResponse(content: unknown): Response {
     choices: [{ message: { content: JSON.stringify(content) } }],
     usage: { prompt_tokens: 20, completion_tokens: 10 },
   });
+}
+
+function sequenceOutput(observations: unknown[]) {
+  return {
+    observations,
+  };
 }
 
 function utcDay(): string {

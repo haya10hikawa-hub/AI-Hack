@@ -34,6 +34,9 @@ describe("API route implementation contracts", () => {
     expect(gapConfirm).toMatch(
       /stableUuidFromRequest\(\s*user\.id,\s*gapId,\s*action,\s*value,?\s*\)/u,
     );
+    expect(gapConfirm).toMatch(
+      /apply_memory_gap_correction[\s\S]*?refreshMemoryRelations\(\{[\s\S]*?memoryId:\s*gapResult\.data\.memory_id[\s\S]*?\}\)\.catch\(\(\) => undefined\)/u,
+    );
   });
 
   it("keeps deletion retryable and idempotent around storage cleanup", () => {
@@ -73,6 +76,20 @@ describe("API route implementation contracts", () => {
       /after\(\(\) =>\s*processAnalysisJobs\(\{[\s\S]*?maxJobs:\s*1/u,
     );
     expect(upload).toMatch(/processingState:\s*result\.processingState/u);
+    const evidence = analysisPipeline.indexOf("const evidenceRows");
+    const claims = analysisPipeline.indexOf("provider.generateEventClaims");
+    const memory = analysisPipeline.indexOf('from("memories")\n      .update');
+    const distillation = analysisPipeline.indexOf("distillMemoryRepresentatives(");
+    expect(evidence).toBeGreaterThan(-1);
+    expect(claims).toBeGreaterThan(evidence);
+    expect(memory).toBeGreaterThan(evidence);
+    expect(distillation).toBeGreaterThan(memory);
+    expect(analysisPipeline).toMatch(
+      /try \{[\s\S]*?persistMemoryRepresentatives\(\{[\s\S]*?representatives:\s*distillMemoryRepresentatives\([\s\S]*?\}\);[\s\S]*?\} catch \{/u,
+    );
+    expect(analysisPipeline).toMatch(
+      /refreshMemoryRelations\(\{[\s\S]*?memoryId:\s*input\.memoryId,[\s\S]*?\}\)\.catch\(\(\) => undefined\)/u,
+    );
   });
 
   it("claims, advances, and finishes durable jobs through server-only RPCs", () => {
