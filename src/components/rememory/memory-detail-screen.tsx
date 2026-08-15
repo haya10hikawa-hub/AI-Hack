@@ -23,6 +23,8 @@ import type {
   EpistemicState,
   EvidenceItem,
   MemoryDetailPayload,
+  MemoryRepresentativeImage,
+  RelatedMemoryItem,
 } from "./types";
 import { useApiResource } from "./use-api-resource";
 
@@ -74,6 +76,29 @@ function evidenceKindLabel(evidence: EvidenceItem): string {
   }
 }
 
+function relationLabel(
+  related: RelatedMemoryItem,
+  currentCapturedAt: string | null,
+) {
+  switch (related.relationType) {
+    case "before":
+      if (related.capturedAt && currentCapturedAt) {
+        const relatedTime = Date.parse(related.capturedAt);
+        const currentTime = Date.parse(currentCapturedAt);
+        if (!Number.isNaN(relatedTime) && !Number.isNaN(currentTime)) {
+          return relatedTime < currentTime
+            ? "このMemoryより前"
+            : "このMemoryより後";
+        }
+      }
+      return "時間でつながるMemory";
+    case "same_place":
+      return "同じ場所のMemory";
+    case "same_activity":
+      return "同じ活動のMemory";
+  }
+}
+
 export function MemoryDetailScreen() {
   const params = useParams<{ id?: string | string[] }>();
   const rawId = params?.id;
@@ -82,6 +107,28 @@ export function MemoryDetailScreen() {
     id ? `/api/memories/${encodeURIComponent(id)}` : null,
   );
   const data = resource.data;
+  const visualPhotos = [
+    data?.representatives?.keyMoment,
+    data?.representatives?.complement,
+  ].filter(
+    (photo): photo is MemoryRepresentativeImage =>
+      photo != null && photo.imageUrl !== null,
+  );
+  const mainPhoto = data?.representatives?.identity?.imageUrl
+    ? data.representatives.identity
+    : data?.memory.representativeImageUrl
+      ? {
+          assetId: "deterministic-fallback",
+          imageUrl: data.memory.representativeImageUrl,
+          alt:
+            data.memory.representativeImageAlt ??
+            data.memory.title ??
+            "Memoryの代表写真",
+        }
+      : (visualPhotos[0] ?? null);
+  const secondaryPhotos = visualPhotos.filter(
+    ({ assetId }) => assetId !== mainPhoto?.assetId,
+  );
   const [deleteState, setDeleteState] = useState<
     "idle" | "confirming" | "deleting" | "deleted"
   >("idle");
@@ -193,24 +240,37 @@ export function MemoryDetailScreen() {
         ) : data?.memory ? (
           <article className="memory-detail">
             <header className="memory-detail__hero">
-              {data.memory.representativeImageUrl ? (
-                <Image
-                  src={data.memory.representativeImageUrl}
-                  alt={
-                    data.memory.representativeImageAlt ||
-                    data.memory.title ||
-                    "Memoryの代表写真"
-                  }
-                  width={1200}
-                  height={900}
-                  unoptimized
-                />
-              ) : (
-                <div className="memory-detail__no-image">
-                  <ImageIcon aria-hidden="true" size={30} />
-                  <span>表示できる代表写真はありません</span>
-                </div>
-              )}
+              <div className="memory-composition" aria-label="Memoryの写真">
+                {mainPhoto?.imageUrl ? (
+                  <Image
+                    className="memory-composition__primary"
+                    src={mainPhoto.imageUrl}
+                    alt={mainPhoto.alt}
+                    width={1200}
+                    height={900}
+                    unoptimized
+                  />
+                ) : (
+                  <div className="memory-detail__no-image">
+                    <ImageIcon aria-hidden="true" size={30} />
+                    <span>表示できる代表写真はありません</span>
+                  </div>
+                )}
+                {secondaryPhotos.length > 0 ? (
+                  <div className="memory-composition__secondary">
+                    {secondaryPhotos.map((photo) => (
+                      <Image
+                        key={photo.assetId}
+                        src={photo.imageUrl!}
+                        alt={photo.alt}
+                        width={600}
+                        height={450}
+                        unoptimized
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
               <div className="memory-detail__identity">
                 <span
                   className={`truth-label truth-label--${data.memory.state}`}
@@ -310,8 +370,8 @@ export function MemoryDetailScreen() {
                 <span className="thread-line thread-line--dotted" />
               </div>
               <div>
-                <p className="eyebrow">AI reconstruction · 未確認</p>
-                <h2 id="reconstruction-title">AIが写真から読み取ったこと</h2>
+                <p className="eyebrow">Memory Scene</p>
+                <h2 id="reconstruction-title">この日にあったこと</h2>
                 {data.reconstruction ? (
                   <p>{data.reconstruction}</p>
                 ) : (
@@ -319,6 +379,83 @@ export function MemoryDetailScreen() {
                     表示できるAI再構成はありません。AIが分からない内容は追加しません。
                   </p>
                 )}
+              </div>
+            </section>
+
+            {(data.relatedMemories?.length ?? 0) > 0 ? (
+              <section
+                className="connected-moments"
+                aria-labelledby="connected-moments-title"
+              >
+                <p className="eyebrow">Connected moments</p>
+                <h2 id="connected-moments-title">この記憶につながる瞬間</h2>
+                <ol>
+                  {(data.relatedMemories ?? []).map((related) => (
+                    <li key={`${related.memoryId}:${related.relationType}`}>
+                      <span
+                        className={`connected-moments__line connected-moments__line--${related.relationState}`}
+                        aria-hidden="true"
+                      />
+                      {related.representativeImageUrl ? (
+                        <Image
+                          src={related.representativeImageUrl}
+                          alt={`${related.title}の代表写真`}
+                          width={144}
+                          height={108}
+                          unoptimized
+                        />
+                      ) : (
+                        <span
+                          className="connected-moments__node"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span>
+                        <small>
+                          {relationLabel(related, data.memory.capturedAt)}
+                        </small>
+                        <Link
+                          href={`/memories/${encodeURIComponent(related.memoryId)}`}
+                        >
+                          {related.title}
+                        </Link>
+                        <em>{formatDate(related.capturedAt)}</em>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ) : null}
+
+            {data.memory.hasOpenGap ? (
+              <aside className="detail-confirmation-entry">
+                <span
+                  className="thread-node thread-node--open"
+                  aria-hidden="true"
+                />
+                <div>
+                  <span className="eyebrow">Ask about this moment</span>
+                  <strong>まだ確認できていない文脈があります</strong>
+                  <p>
+                    質問はひとつだけ。答えないままMemoryを見ることもできます。
+                  </p>
+                </div>
+                <Link className="button button--coral" href="/confirm">
+                  確認する
+                </Link>
+              </aside>
+            ) : null}
+
+            <section
+              className="reconstruction-section"
+              aria-labelledby="why-title"
+            >
+              <div className="layer-marker" aria-hidden="true">
+                <span className="thread-node thread-node--open" />
+              </div>
+              <div>
+                <p className="eyebrow">AI / Evidence</p>
+                <h2 id="why-title">Why Re:Memory remembers this</h2>
                 {data.claims.length > 0 ? (
                   <ul className="claim-list">
                     {data.claims.map((claim) => (
@@ -342,7 +479,11 @@ export function MemoryDetailScreen() {
                       </li>
                     ))}
                   </ul>
-                ) : null}
+                ) : (
+                  <p className="muted-copy">
+                    確認できるClaimはまだありません。
+                  </p>
+                )}
               </div>
             </section>
 
@@ -389,24 +530,6 @@ export function MemoryDetailScreen() {
                 </p>
               )}
             </details>
-
-            {data.memory.hasOpenGap ? (
-              <aside className="detail-confirmation-entry">
-                <span
-                  className="thread-node thread-node--open"
-                  aria-hidden="true"
-                />
-                <div>
-                  <strong>まだ確認できていない文脈があります</strong>
-                  <p>
-                    質問はひとつだけ。答えないままMemoryを見ることもできます。
-                  </p>
-                </div>
-                <Link className="button button--coral" href="/confirm">
-                  確認する
-                </Link>
-              </aside>
-            ) : null}
 
             <section
               className="memory-delete"
