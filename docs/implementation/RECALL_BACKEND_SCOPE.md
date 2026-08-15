@@ -112,7 +112,7 @@ Recall Engineへの入力として、明示的なContext型をDomainに作る。
 ```text
 CurrentContext
 - now/date
-- coarsePlace? 
+- coarsePlace?
 - activities?
 - explicitQuery?（既存検索と統合する場合）
 ```
