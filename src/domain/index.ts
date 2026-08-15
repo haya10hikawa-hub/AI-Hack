@@ -7,5 +7,6 @@ export * from "./media-validation";
 export * from "./memory-assessment";
 export * from "./memory-distillation";
 export * from "./memory-relations";
+export * from "./memory-search-document";
 export * from "./search";
 export * from "./sequence";
