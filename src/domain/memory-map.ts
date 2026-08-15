@@ -1,4 +1,4 @@
-import { getResolution, isValidCell, latLngToCell } from "h3-js";
+import { cellToLatLng, getResolution, isValidCell, latLngToCell } from "h3-js";
 
 export const MEMORY_MAP_H3_RESOLUTION = 10;
 export const MEMORY_MAP_MAX_CELLS = 500;
@@ -36,6 +36,12 @@ export function coordinatesToMemoryMapCell(
     throw new Error("位置情報を地域セルへ変換できませんでした。");
   }
   return latLngToCell(latitude, longitude, MEMORY_MAP_H3_RESOLUTION);
+}
+
+export function memoryMapCellCenter(cellId: string) {
+  if (!isAllowedMemoryMapCell(cellId)) return null;
+  const [latitude, longitude] = cellToLatLng(cellId);
+  return { latitude, longitude };
 }
 
 export function progressMemoryMapState(

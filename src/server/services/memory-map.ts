@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   MEMORY_MAP_MAX_CELLS,
   MEMORY_MAP_STATES,
+  memoryMapCellCenter,
 } from "@/src/domain/memory-map";
 
 import { RepositoryError } from "./memories";
@@ -103,6 +104,7 @@ export async function getMemoryMap(client: Client, userId: string) {
     .filter((result) => result.success)
     .map(({ data: cell }) => ({
       cellId: cell.cell_id,
+      center: memoryMapCellCenter(cell.cell_id),
       state: cell.state,
       firstSeenAt: cell.first_seen_at,
       lastSeenAt: cell.last_seen_at,

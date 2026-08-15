@@ -10,7 +10,10 @@ import {
 } from "@/src/server/http/responses";
 import { getMemoryMap } from "@/src/server/services/memory-map";
 import { RepositoryError } from "@/src/server/services/memories";
-import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
+import {
+  requireAuthenticatedUser,
+  resolveRequestAuth,
+} from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
 const RevealSchema = z
@@ -25,7 +28,7 @@ function bodyIsBounded(request: NextRequest): boolean {
 export async function GET(request: NextRequest) {
   const id = requestId(request);
   try {
-    const { user, supabase } = await requireAuthenticatedUser();
+    const { user, supabase } = await resolveRequestAuth(request);
     return dataResponse(await getMemoryMap(supabase, user.id));
   } catch (error) {
     return routeError(error, id);
