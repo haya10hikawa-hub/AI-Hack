@@ -172,6 +172,7 @@ export class OrcaRouterProvider implements AIProvider {
     assertPrivacySafeSequenceInput(input);
     const promptInput = {
       sequenceId: input.sequenceId,
+      sequenceMetadata: input.sequenceMetadata,
       assets: input.assets.map(
         ({ assetId, mimeType, width, height, capturedAt, coarsePlace }) => ({
           assetId,

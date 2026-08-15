@@ -36,6 +36,16 @@ export type AIInvocationContext = z.infer<typeof AIInvocationContextSchema>;
 export const SequenceAnalysisInputSchema = z
   .object({
     sequenceId: IdentifierSchema,
+    /** Deterministic sequence-level context used to disambiguate what the user
+     *  was doing (photo count, temporal extent, time-of-day bucket). */
+    sequenceMetadata: z
+      .object({
+        mediaCount: z.number().int().nonnegative().max(100).nullable(),
+        durationMinutes: z.number().nonnegative().max(1440).nullable(),
+        timeOfDay: z.string().trim().max(40).nullable(),
+      })
+      .strict()
+      .optional(),
     assets: z
       .array(
         z

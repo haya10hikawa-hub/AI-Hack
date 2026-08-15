@@ -72,7 +72,9 @@ export async function analyzePersistedSequence(input: {
   const context = {
     userId: input.userId,
     requestId: input.requestId,
-    allowStrongModel: false,
+    // Uploads prefer accuracy over cost: route claim/gap synthesis to the
+    // strong model instead of the cheap local model.
+    allowStrongModel: true,
   };
   const resumeFrom = input.resumeFrom ?? "analysis";
   const [eventResult, memoryResult] = await Promise.all([
@@ -99,8 +101,14 @@ export async function analyzePersistedSequence(input: {
       : "AI再構成の要約はありません。";
 
   if (resumeFrom === "analysis") {
+    const sequenceMetadata = await loadSequenceMetadata(
+      input.database,
+      input.userId,
+      eventResult.data.id,
+    );
     const analysis = await provider.analyzeSequence(context, {
       sequenceId: input.sequenceId,
+      sequenceMetadata,
       assets: input.representativeAssets.slice(0, 4).map((asset) => ({
         assetId: asset.id,
         mimeType: "image/webp" as const,
@@ -477,6 +485,44 @@ export async function analyzePersistedSequence(input: {
   }
 
   return { complete: true, nextStage: null };
+}
+
+async function loadSequenceMetadata(
+  database: SupabaseClient,
+  userId: string,
+  eventId: string,
+): Promise<{
+  mediaCount: number | null;
+  durationMinutes: number | null;
+  timeOfDay: string | null;
+}> {
+  const { data, error } = await database
+    .from("evidence")
+    .select("field,value_json")
+    .eq("user_id", userId)
+    .eq("event_id", eventId)
+    .in("field", ["media_count", "sequence_duration_minutes", "time_of_day"]);
+  if (error !== null || data === null) {
+    return { mediaCount: null, durationMinutes: null, timeOfDay: null };
+  }
+  const byField = new Map<string, Record<string, unknown>>();
+  for (const row of data) {
+    const value = row.value_json;
+    if (value !== null && typeof value === "object") {
+      byField.set(row.field, value as Record<string, unknown>);
+    }
+  }
+  const numberOrNull = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+  const labelOrNull = (value: unknown): string | null =>
+    typeof value === "string" && value.length > 0 ? value : null;
+  return {
+    mediaCount: numberOrNull(byField.get("media_count")?.count),
+    durationMinutes: numberOrNull(
+      byField.get("sequence_duration_minutes")?.minutes,
+    ),
+    timeOfDay: labelOrNull(byField.get("time_of_day")?.label),
+  };
 }
 
 function preferredClaimsByField(claims: ActiveClaimSnapshot[]) {

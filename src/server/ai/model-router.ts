@@ -28,11 +28,9 @@ export function routeModelRole(request: ModelRoutingRequest): AIModelRole {
     case "analyze_sequence":
       return "VISION_CHEAP";
     case "generate_event_claims":
-      return request.allowStrongModel && request.complexity === "high"
-        ? "EVENT_STRONG"
-        : "EVENT_CHEAP";
+      return request.allowStrongModel ? "EVENT_STRONG" : "EVENT_CHEAP";
     case "detect_memory_gap":
-      return "EVENT_CHEAP";
+      return request.allowStrongModel ? "EVENT_STRONG" : "EVENT_CHEAP";
     case "parse_search_query":
     case "rerank_search_candidates":
     case "generate_grounded_answer":
