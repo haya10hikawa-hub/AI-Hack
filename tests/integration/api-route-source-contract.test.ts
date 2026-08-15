@@ -79,7 +79,9 @@ describe("API route implementation contracts", () => {
     const evidence = analysisPipeline.indexOf("const evidenceRows");
     const claims = analysisPipeline.indexOf("provider.generateEventClaims");
     const memory = analysisPipeline.indexOf('from("memories")\n      .update');
-    const distillation = analysisPipeline.indexOf("distillMemoryRepresentatives(");
+    const distillation = analysisPipeline.indexOf(
+      "distillMemoryRepresentatives(",
+    );
     expect(evidence).toBeGreaterThan(-1);
     expect(claims).toBeGreaterThan(evidence);
     expect(memory).toBeGreaterThan(evidence);
