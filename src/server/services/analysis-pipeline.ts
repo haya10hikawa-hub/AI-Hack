@@ -6,12 +6,17 @@ import {
   assessContextCompleteness,
   evaluateMemoryGapGate,
 } from "@/src/domain/memory-assessment";
+import { describeEventSemantics } from "@/src/domain/event-semantics";
+import { distillMemoryRepresentatives } from "@/src/domain/memory-distillation";
 import {
   SupabaseAICostLedger,
   SupabaseRateLimitStore,
   createAIProviderFromEnv,
   persistAIRun,
+  toAssetSemanticRepresentations,
 } from "@/src/server/ai";
+import { persistMemoryRepresentatives } from "@/src/server/services/memory-distillation";
+import { refreshMemoryRelations } from "@/src/server/services/memory-relations";
 
 export type AnalysisPipelineStage = "analysis" | "claims" | "gap";
 
@@ -103,33 +108,44 @@ export async function analyzePersistedSequence(input: {
         coarsePlace: asset.coarsePlace,
       })),
     });
-    await persistAIRun(input.database, input.userId, analysis.run);
-    const evidenceRows = analysis.data.observations.map((observation) => {
-      const value = {
-        value: observation.value,
-        confidenceBand: observation.confidenceBand,
-        uncertainty: observation.uncertainty,
-      };
-      return {
-        id: crypto.randomUUID(),
-        user_id: input.userId,
-        event_id: eventResult.data.id,
-        asset_id: observation.assetId,
-        kind: "ai_observation",
-        field: observation.field,
-        value_json: value,
-        source_type: "ai_observation",
-        source_version: analysis.run.schemaVersion,
-        dedupe_key: stablePipelineKey(
-          input.sequenceId,
-          `evidence:${observation.assetId}`,
-          observation.field,
-          value,
-        ),
-        observed_at: null,
-        validity: observation.confidenceBand === "low" ? "uncertain" : "valid",
-      };
-    });
+    const analysisRunId = await persistAIRun(
+      input.database,
+      input.userId,
+      analysis.run,
+    );
+    const semantics = toAssetSemanticRepresentations(analysis.data);
+    const semanticsByAsset = new Map(
+      semantics.map((semantic) => [semantic.assetId, semantic]),
+    );
+    const presentation = describeEventSemantics(semantics);
+    const evidenceRows = semantics.flatMap((semantic) =>
+      semantic.facets.map((facet) => {
+        const value = {
+          value: facet.value,
+          confidenceBand: facet.confidenceBand,
+          uncertainty: facet.uncertainty,
+        };
+        return {
+          id: crypto.randomUUID(),
+          user_id: input.userId,
+          event_id: eventResult.data.id,
+          asset_id: semantic.assetId,
+          kind: "ai_observation",
+          field: facet.type,
+          value_json: value,
+          source_type: "ai_observation",
+          source_version: analysis.run.schemaVersion,
+          dedupe_key: stablePipelineKey(
+            input.sequenceId,
+            `evidence:${semantic.assetId}`,
+            facet.type,
+            value,
+          ),
+          observed_at: null,
+          validity: facet.confidenceBand === "low" ? "uncertain" : "valid",
+        };
+      }),
+    );
     if (evidenceRows.length > 0) {
       const evidenceInsert = await input.database
         .from("evidence")
@@ -144,8 +160,8 @@ export async function analyzePersistedSequence(input: {
     const updateMemory = await input.database
       .from("memories")
       .update({
-        title: analysis.data.titleCandidate,
-        summary: analysis.data.summaryCandidate,
+        title: presentation.title,
+        summary: presentation.summary,
         updated_at: new Date().toISOString(),
       })
       .eq("id", input.memoryId)
@@ -153,7 +169,32 @@ export async function analyzePersistedSequence(input: {
     if (updateMemory.error !== null) {
       throw new Error("Memory reconstruction update failed.");
     }
-    summaryCandidate = analysis.data.summaryCandidate;
+    summaryCandidate = presentation.summary;
+    await refreshMemoryRelations({
+      client: input.database,
+      userId: input.userId,
+      memoryId: input.memoryId,
+    }).catch(() => undefined);
+    try {
+      await persistMemoryRepresentatives({
+        client: input.database,
+        userId: input.userId,
+        memoryId: input.memoryId,
+        aiRunId: analysisRunId,
+        representatives: distillMemoryRepresentatives(
+          input.representativeAssets.map((asset) => ({
+            assetId: asset.id,
+            capturedAt: asset.capturedAt,
+            semantics: semanticsByAsset.get(asset.id) ?? {
+              assetId: asset.id,
+              facets: [],
+            },
+          })),
+        ),
+      });
+    } catch {
+      // Deterministic sequence representatives remain available.
+    }
     await input.onStage?.("claims");
     if (input.stopAfterStage === true) {
       return { complete: false, nextStage: "claims" };

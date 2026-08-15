@@ -8,6 +8,7 @@ import {
   routeError,
 } from "@/src/server/http/responses";
 import { RepositoryError } from "@/src/server/services/memories";
+import { refreshMemoryRelations } from "@/src/server/services/memory-relations";
 import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
@@ -111,6 +112,11 @@ export async function POST(
     const result = Array.isArray(corrected.data)
       ? corrected.data[0]
       : corrected.data;
+    await refreshMemoryRelations({
+      client: database,
+      userId: user.id,
+      memoryId: gapResult.data.memory_id,
+    }).catch(() => undefined);
     return dataResponse({
       saved: true,
       createdClaimId:

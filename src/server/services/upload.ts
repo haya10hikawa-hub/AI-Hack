@@ -68,7 +68,7 @@ export interface IngestionResult {
   sequences: Array<{
     sequenceId: string;
     memoryId: string;
-    representativeAssets: StoredAsset[];
+    analysisCandidates: StoredAsset[];
   }>;
   retainedOriginalStorageKeys: string[];
 }
@@ -237,8 +237,8 @@ export async function ingestUpload(input: {
   });
   persistedSequences.push(...retrySequences);
   const retryAssetIds = new Set(
-    retrySequences.flatMap(({ representativeAssets }) =>
-      representativeAssets.map(({ id }) => id),
+    retrySequences.flatMap(({ analysisCandidates }) =>
+      analysisCandidates.map(({ id }) => id),
     ),
   );
 
@@ -580,7 +580,9 @@ async function persistDeterministicSequence(input: {
   const sequenceId = crypto.randomUUID();
   const eventId = crypto.randomUUID();
   const memoryId = crypto.randomUUID();
-  const representatives = selectRepresentativeAssets(input.domainAssets);
+  const representatives = selectRepresentativeAssets(input.domainAssets, {
+    maxRepresentatives: 4,
+  });
   const representativeIds = new Set(
     representatives.map(({ assetId }) => assetId),
   );
@@ -802,7 +804,7 @@ async function persistDeterministicSequence(input: {
   return {
     sequenceId,
     memoryId,
-    representativeAssets: input.shouldAnalyze
+    analysisCandidates: input.shouldAnalyze
       ? input.clusterAssets.filter(({ id }) => representativeIds.has(id))
       : [],
   };
@@ -875,11 +877,11 @@ async function loadRetrySequences(input: {
     const uploadedById = new Map(
       input.assets.map((asset) => [asset.id, asset]),
     );
-    const representativeAssets: StoredAsset[] = [];
+    const analysisCandidates: StoredAsset[] = [];
     for (const row of representativeRows.data ?? []) {
       const uploaded = uploadedById.get(row.id);
       if (uploaded !== undefined) {
-        representativeAssets.push(uploaded);
+        analysisCandidates.push(uploaded);
         continue;
       }
       if (typeof row.derivative_storage_key !== "string") continue;
@@ -894,7 +896,7 @@ async function loadRetrySequences(input: {
       if (metadata.width === undefined || metadata.height === undefined) {
         throw new RepositoryError("decode_retry_derivative");
       }
-      representativeAssets.push({
+      analysisCandidates.push({
         id: row.id,
         name: "stored-private-derivative",
         mimeType: row.mime_type as SupportedImageMime,
@@ -916,11 +918,11 @@ async function loadRetrySequences(input: {
         uploadSlotId: null,
       });
     }
-    if (representativeAssets.length > 0) {
+    if (analysisCandidates.length > 0) {
       result.push({
         sequenceId,
         memoryId: memory.data.id,
-        representativeAssets,
+        analysisCandidates,
       });
     }
   }
