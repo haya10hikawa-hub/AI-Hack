@@ -3,6 +3,10 @@ import SwiftUI
 struct MemoriesView: View {
     @StateObject private var model: MemoriesViewModel
     @State private var showingUpload = false
+    @State private var path: [String] = []
+    // Held here, not in the deck, so coming back from a Memory lands on the same month and event.
+    @State private var selectedMonthID = ""
+    @State private var selectedMemoryID: String?
     @Namespace private var transitionNamespace
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let configurationError: String?
@@ -12,40 +16,64 @@ struct MemoriesView: View {
     }
 
     var body: some View {
-        Group {
-            if model.state == .loading && model.memories.isEmpty { ProgressView("Memoriesを読み込み中") }
-            else if let message = model.error ?? configurationError, model.memories.isEmpty { ContentUnavailableView("読み込めません", systemImage: "exclamationmark.triangle", description: Text(message)) }
-            else if model.memories.isEmpty { ContentUnavailableView("まだMemoryがありません", systemImage: "photo.on.rectangle") }
-            else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 28) {
-                        ForEach(Array(stride(from: 0, to: model.memories.count, by: 3)), id: \.self) { index in
-                            memoryLink(model.memories[index], style: .large)
-                            if index + 1 < model.memories.count {
-                                HStack(alignment: .top, spacing: 12) {
-                                    memoryLink(model.memories[index + 1], style: .small)
-                                    if index + 2 < model.memories.count { memoryLink(model.memories[index + 2], style: .small) }
-                                    else { Spacer(minLength: 0) }
-                                }
-                            }
-                        }
-                    }.padding(.horizontal).padding(.bottom)
-                }.refreshable { await model.load() }
-            }
+        NavigationStack(path: $path) {
+            content
+                .navigationTitle("")
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(for: String.self) {
+                    MemoryView(memoryId: $0, api: model.api, transitionNamespace: transitionNamespace,
+                               transitionEnabled: !reduceMotion)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Add Photos", systemImage: "plus") { showingUpload = true }
+                            .labelStyle(.iconOnly)
+                            .disabled(model.api == nil)
+                    }
+                }
+                .sheet(isPresented: $showingUpload, onDismiss: { Task { await model.load() } }) { UploadView(api: model.api) }
+                .task {
+                    if !PreviewFixtures.isEnabled { await model.load() }
+                    if let route = PreviewFixtures.route, route != .stacks, !route.isRecall {
+                        path = [PreviewFixtures.memory.id]
+                    }
+                }
         }
-        .navigationTitle("Memories")
-        .navigationDestination(for: String.self) {
-            MemoryView(memoryId: $0, api: model.api, transitionNamespace: transitionNamespace, transitionEnabled: !reduceMotion)
-        }
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Add Photos", systemImage: "plus") { showingUpload = true }.disabled(model.api == nil) } }
-        .sheet(isPresented: $showingUpload, onDismiss: { Task { await model.load() } }) { UploadView(api: model.api) }
-        .task { await model.load() }
     }
 
-    private func memoryLink(_ memory: MemoryPresentation, style: MemoryThumbnail.Style) -> some View {
-        NavigationLink(value: memory.id) { MemoryThumbnail(memory: memory, style: style) }
-            .buttonStyle(.plain)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .memoryTransitionSource(id: memory.id, in: transitionNamespace, enabled: !reduceMotion)
+    @ViewBuilder
+    private var content: some View {
+        if model.state == .loading && memories.isEmpty {
+            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity).background(MemoryDepth.canvas)
+        } else if let message = visibleError, memories.isEmpty {
+            ContentUnavailableView("読み込めません", systemImage: "exclamationmark.triangle", description: Text(message))
+        } else if memories.isEmpty {
+            ContentUnavailableView("まだMemoryがありません", systemImage: "photo.on.rectangle")
+        } else {
+            MonthEventDeck(sections: sections,
+                           selectedMonthID: $selectedMonthID,
+                           selectedMemoryID: $selectedMemoryID,
+                           namespace: transitionNamespace,
+                           transitionEnabled: !reduceMotion) { memory in
+                selectedMemoryID = memory.id
+                path.append(memory.id)
+            }
+            .onAppear { alignSelection() }
+            .onChange(of: sections.map(\.id)) { _, _ in alignSelection() }
+            .refreshable { if !PreviewFixtures.isEnabled { await model.load() } }
+        }
     }
+
+    /// Keep the stored selection pointing at rows that still exist once data arrives or refreshes.
+    private func alignSelection() {
+        guard let current = sections.first(where: { $0.id == selectedMonthID }) ?? sections.first else { return }
+        if selectedMonthID != current.id { selectedMonthID = current.id }
+        if selectedMemoryID == nil || !current.memories.contains(where: { $0.id == selectedMemoryID }) {
+            selectedMemoryID = current.memories.first?.id
+        }
+    }
+
+    private var memories: [MemoryPresentation] { PreviewFixtures.isEnabled ? PreviewFixtures.memories : model.memories }
+    private var sections: [MemoryMonthSection] { MemoryMonthBuilder.sections(from: memories) }
+    private var visibleError: String? { PreviewFixtures.isEnabled ? nil : model.error ?? configurationError }
 }

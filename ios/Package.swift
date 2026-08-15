@@ -10,9 +10,9 @@ let package = Package(
             name: "ReMemoryCore",
             path: "ReMemory",
             exclude: [
-                "App", "Components", "PreviewSupport", "Features/Upload",
+                "App", "Components", "DesignSystem", "PreviewSupport", "Features/Upload",
                 "Features/Memories/MemoriesView.swift", "Features/Memory/MemoryView.swift",
-                "Features/Recall/RecallView.swift", "Features/Confirmation/ConfirmationView.swift"
+                "Features/Recall/RecallView.swift"
             ],
             sources: [
                 "Networking", "Transport", "Presentation",

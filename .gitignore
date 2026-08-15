@@ -16,3 +16,13 @@
 # as the only implementation root and never stage the duplicate checkout.
 /AI-Hack/
 /.vercel/
+
+# Xcode local state
+/ios/.build/
+/ios/ReMemory.xcodeproj/xcuserdata/
+/ios/ReMemory.xcodeproj/project.xcworkspace/
+
+# Personal photographs used only by the DEBUG fixture mode on a local Simulator.
+# They stay out of the shared repository and are excluded from Release builds
+# via EXCLUDED_SOURCE_FILE_NAMES; keep the local folder to run fixtures.
+/ios/ReMemory/PreviewSupport/FixturePhotos/
