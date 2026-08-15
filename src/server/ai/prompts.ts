@@ -10,7 +10,7 @@ Security boundary:
 `.trim();
 
 const PURPOSE_INSTRUCTIONS: Record<AIPurpose, string> = {
-  analyze_sequence: `Observe only visible, non-sensitive details in the supplied representative derivatives. Report uncertainty. Do not infer purpose, identity, relationship, or exact location from appearance alone.`,
+  analyze_sequence: `Return only visible semantic observations for each supplied analysis-candidate derivative: activity, object, people_group, environment, moment, detail, or visible_text. Report uncertainty, and include a specific uncertainty for every low-confidence observation. Do not select representative images. Do not infer purpose, personal identity, relationship, emotion, or exact location from appearance alone.`,
   generate_event_claims: `Create atomic candidate claims supported by at least one supplied evidence id. Do not convert an inference into user-confirmed truth. Omit unsupported claims.`,
   detect_memory_gap: `Find at most one context gap worth asking about. Ask only when options are narrow and grounded in supplied context; otherwise return no candidate. candidateValue is the exact provisional fact a positive confirmation would confirm, candidateOptionValue identifies its option, and evidenceIds must ground that provisional fact.`,
   parse_search_query: `Interpret the query as search data. Preserve rawQuery exactly. Expand dates relative to supplied currentDate/timezone and apply only supplied confirmed aliases.`,

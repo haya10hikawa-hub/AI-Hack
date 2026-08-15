@@ -153,6 +153,22 @@ describe("baseline migration security contract", () => {
     );
   });
 
+  it("keeps representatives and deterministic relations owner-scoped", () => {
+    expect(sql).toMatch(/create table public\.memory_representatives/iu);
+    expect(sql).toMatch(/unique \(memory_id, role\)/iu);
+    expect(sql).toMatch(/unique \(memory_id, asset_id\)/iu);
+    expect(sql).toMatch(
+      /create policy memory_representatives_select_own[\s\S]*user_id = auth\.uid\(\)/iu,
+    );
+    expect(sql).toMatch(
+      /relation_type in \('before','same_place','same_activity'\)/iu,
+    );
+    expect(sql).toMatch(/create unique index memory_relations_dedupe_idx/iu);
+    expect(sql).toMatch(/source_memory_id::text < target_memory_id::text/iu);
+    expect(sql).toMatch(/source_memory_id <> target_memory_id/iu);
+    expect(sql).toMatch(/on conflict \(user_id, dedupe_key\)/iu);
+  });
+
   it("caches only coarse public locality labels service-side", () => {
     expect(sql).toMatch(/create table public\.coarse_location_labels/iu);
     expect(sql).toMatch(/grid_key text primary key/iu);

@@ -77,7 +77,7 @@ describe("deterministic temporal sequences", () => {
     });
   });
 
-  it("selects at most three representatives and collapses duplicate hashes", () => {
+  it("selects deterministically with duplicate collapse and temporal coverage", () => {
     const duplicate = {
       ...asset("c", "2026-04-12T10:00:00"),
       sha256: asset("a", "2026-04-12T09:00:00").sha256,
@@ -92,6 +92,15 @@ describe("deterministic temporal sequences", () => {
     expect(selected.map(({ assetId }) => assetId)).not.toEqual(
       expect.arrayContaining(["a", "c"]),
     );
+    expect(selected.map(({ assetId }) => assetId)).toEqual(["a", "b", "d"]);
+    expect(
+      selectRepresentativeAssets([
+        asset("a", "2026-04-12T09:00:00"),
+        asset("b", "2026-04-12T09:30:00"),
+        duplicate,
+        asset("d", "2026-04-12T11:00:00"),
+      ]),
+    ).toEqual(selected);
   });
 });
 

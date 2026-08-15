@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 const mocks = vi.hoisted(() => ({
   requireAuthenticatedUser: vi.fn(),
   createSupabaseAdminClient: vi.fn(),
+  refreshMemoryRelations: vi.fn(),
 }));
 
 vi.mock("@/src/server/supabase/auth", () => {
@@ -22,6 +23,10 @@ vi.mock("@/src/server/supabase/auth", () => {
 vi.mock("@/src/server/supabase/client", () => ({
   createSupabaseAdminClient: mocks.createSupabaseAdminClient,
   createSupabaseServerClient: vi.fn(),
+}));
+
+vi.mock("@/src/server/services/memory-relations", () => ({
+  refreshMemoryRelations: mocks.refreshMemoryRelations,
 }));
 
 import { POST as confirmGap } from "@/app/api/gaps/[id]/confirm/route";
@@ -116,6 +121,7 @@ describe("gap confirmation route", () => {
       user: { id: userId },
       supabase: {},
     });
+    mocks.refreshMemoryRelations.mockResolvedValue(0);
   });
 
   it("uses the exact atomic RPC and derives a stable idempotency key", async () => {
@@ -165,6 +171,41 @@ describe("gap confirmation route", () => {
     expect(rpc.mock.calls[0]![1].p_idempotency_key).toBe(
       rpc.mock.calls[1]![1].p_idempotency_key,
     );
+    expect(mocks.refreshMemoryRelations).toHaveBeenCalledWith({
+      client: expect.anything(),
+      userId,
+      memoryId,
+    });
+  });
+
+  it("keeps a committed correction when relation refresh fails", async () => {
+    const gapQuery = selectedRow({
+      id: gapId,
+      memory_id: memoryId,
+      dimension: "activity",
+      status: "ready_to_ask",
+    });
+    mocks.createSupabaseAdminClient.mockReturnValue({
+      from: vi.fn().mockReturnValue(gapQuery),
+      rpc: vi.fn().mockResolvedValue({
+        data: [{ created_claim_id: createdClaimId }],
+        error: null,
+      }),
+    });
+    mocks.refreshMemoryRelations.mockRejectedValue(new Error("refresh failed"));
+
+    const response = await confirmGap(
+      jsonPost(`/api/gaps/${gapId}/confirm`, {
+        decision: "correct",
+        correctionText: "FTC practice",
+      }),
+      { params: Promise.resolve({ id: gapId }) },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      data: { saved: true, createdClaimId },
+    });
   });
 
   it("shows the persisted candidate value even when options have no label", async () => {
