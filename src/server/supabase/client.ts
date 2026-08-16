@@ -38,6 +38,24 @@ export async function createSupabaseServerClient() {
 }
 
 /**
+ * Read/write client bound to a native client's access token. Row Level Security
+ * applies exactly as it does for the cookie session, so a bearer caller reaches
+ * only its own rows. The token lives in this client's request headers and is
+ * never persisted, cached, or logged.
+ */
+export function createSupabaseBearerClient(accessToken: string) {
+  const config = requireRuntimeConfig();
+  return createClient(config.supabaseUrl, config.supabasePublishableKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+  });
+}
+
+/**
  * Server-only write client. The secret key never enters browser bundles or
  * cookies. Callers must derive every owner id from `auth.getUser()` and keep an
  * explicit `user_id` predicate on reads/writes because this client bypasses RLS.

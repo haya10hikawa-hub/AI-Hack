@@ -4,7 +4,10 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { ConfigurationError } from "@/src/server/config";
-import { RequestSecurityError } from "@/src/server/http/security";
+import {
+  BearerTokenError,
+  RequestSecurityError,
+} from "@/src/server/http/security";
 import { AuthenticationError } from "@/src/server/supabase/auth";
 import { AIProviderError } from "@/src/server/ai/provider";
 
@@ -37,6 +40,16 @@ export function errorResponse(
 }
 
 export function routeError(error: unknown, id?: string) {
+  // Checked before AuthenticationError so a native caller learns that its own
+  // token needs renewing instead of reading the browser session message.
+  if (error instanceof BearerTokenError) {
+    return errorResponse(
+      401,
+      "AUTH_TOKEN_INVALID",
+      "サインインの有効期限が切れました。もう一度サインインしてください。",
+      id,
+    );
+  }
   if (error instanceof AuthenticationError) {
     return errorResponse(
       401,

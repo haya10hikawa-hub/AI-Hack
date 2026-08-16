@@ -5,14 +5,14 @@ import {
   requireRuntimeConfig,
   requireSupabaseAdminConfig,
 } from "@/src/server/config";
-import { assertSameOrigin, requestId } from "@/src/server/http/security";
+import { assertMutationAllowed, requestId } from "@/src/server/http/security";
 import {
   dataResponse,
   errorResponse,
   routeError,
 } from "@/src/server/http/responses";
 import { createUploadManifest } from "@/src/server/services/upload-staging";
-import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
+import { resolveRequestAuth } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
 const PrepareUploadSchema = z
@@ -42,7 +42,7 @@ export const maxDuration = 30;
 export async function POST(request: NextRequest) {
   const id = requestId(request);
   try {
-    assertSameOrigin(request);
+    assertMutationAllowed(request);
     const config = requireRuntimeConfig();
     const input = PrepareUploadSchema.parse(await request.json());
     if (input.files.length > config.upload.maxFiles) {
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { user } = await requireAuthenticatedUser();
+    const { user } = await resolveRequestAuth(request);
     const adminConfig = requireSupabaseAdminConfig();
     const database = createSupabaseAdminClient();
     const { manifest, token } = createUploadManifest({

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 
-import { assertSameOrigin, requestId } from "@/src/server/http/security";
+import { assertMutationAllowed, requestId } from "@/src/server/http/security";
 import {
   dataResponse,
   errorResponse,
@@ -9,7 +9,7 @@ import {
 } from "@/src/server/http/responses";
 import { RepositoryError } from "@/src/server/services/memories";
 import { refreshMemoryRelations } from "@/src/server/services/memory-relations";
-import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
+import { resolveRequestAuth } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
 const RequestSchema = z.discriminatedUnion("decision", [
@@ -39,10 +39,10 @@ export async function POST(
 ) {
   const id = requestId(request);
   try {
-    assertSameOrigin(request);
+    assertMutationAllowed(request);
     const gapId = z.uuid().parse((await context.params).id);
     const input = RequestSchema.parse(await request.json());
-    const { user } = await requireAuthenticatedUser();
+    const { user } = await resolveRequestAuth(request);
     const database = createSupabaseAdminClient();
     const gapResult = await database
       .from("memory_gaps")

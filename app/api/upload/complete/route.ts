@@ -5,7 +5,7 @@ import {
   requireRuntimeConfig,
   requireSupabaseAdminConfig,
 } from "@/src/server/config";
-import { assertSameOrigin, requestId } from "@/src/server/http/security";
+import { assertMutationAllowed, requestId } from "@/src/server/http/security";
 import {
   dataResponse,
   errorResponse,
@@ -21,7 +21,7 @@ import {
 } from "@/src/server/services/upload-staging";
 import { ingestUpload } from "@/src/server/services/upload";
 import { resolveCoarseLocationLabel } from "@/src/server/services/reverse-geocode";
-import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
+import { resolveRequestAuth } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
 const CompleteUploadSchema = z
@@ -42,11 +42,11 @@ export const maxDuration = 300;
 export async function POST(request: NextRequest) {
   const id = requestId(request);
   try {
-    assertSameOrigin(request);
+    assertMutationAllowed(request);
     const input = CompleteUploadSchema.parse(await request.json());
     const config = requireRuntimeConfig();
     const adminConfig = requireSupabaseAdminConfig();
-    const { user } = await requireAuthenticatedUser();
+    const { user } = await resolveRequestAuth(request);
     let manifest;
     try {
       manifest = verifyUploadManifest({

@@ -11,8 +11,14 @@ import {
 import { collectGroundedFacts } from "@/src/domain/grounded-answer";
 import { JsonValueSchema } from "@/src/domain/json";
 import { isAllowedMemoryMapCell } from "@/src/domain/memory-map";
+import { buildMemorySearchDocument } from "@/src/domain/memory-search-document";
+import {
+  EventFacetTypeSchema,
+  normalizeAssetSemanticRepresentations,
+  type AssetSemanticRepresentation,
+} from "@/src/domain/event-semantics";
 import { selectSearchCandidates } from "@/src/domain/search";
-import { assertSameOrigin, requestId } from "@/src/server/http/security";
+import { assertMutationAllowed, requestId } from "@/src/server/http/security";
 import { dataResponse, routeError } from "@/src/server/http/responses";
 import {
   getMemoryThread,
@@ -22,7 +28,7 @@ import {
   normalizeSearchFeedbackQuery,
   searchFeedbackQueryHash,
 } from "@/src/server/services/search-feedback";
-import { requireAuthenticatedUser } from "@/src/server/supabase/auth";
+import { resolveRequestAuth } from "@/src/server/supabase/auth";
 import { createSupabaseAdminClient } from "@/src/server/supabase/client";
 
 const SearchRequestSchema = z
@@ -62,6 +68,19 @@ const StoredClaimSchema = z.object({
 
 type StoredClaim = z.infer<typeof StoredClaimSchema>;
 
+const StoredSemanticEvidenceSchema = z.object({
+  id: z.string().uuid(),
+  asset_id: z.string().uuid().nullable(),
+  field: EventFacetTypeSchema,
+  value_json: z.object({
+    value: z.string(),
+    confidenceBand: z.enum(["low", "medium", "high"]),
+    uncertainty: z.string().nullable(),
+  }),
+  validity: z.literal("valid"),
+  source_type: z.literal("ai_observation"),
+});
+
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -74,9 +93,9 @@ export async function POST(request: NextRequest) {
       }
     | undefined;
   try {
-    assertSameOrigin(request);
+    assertMutationAllowed(request);
     const input = SearchRequestSchema.parse(await request.json());
-    const { user, supabase } = await requireAuthenticatedUser();
+    const { user, supabase } = await resolveRequestAuth(request);
     const database = createSupabaseAdminClient();
     auditContext = { database, userId: user.id };
     let mapMemoryIds: string[] | null = null;
@@ -189,7 +208,7 @@ export async function POST(request: NextRequest) {
     let memoryQuery = supabase
       .from("memories")
       .select(
-        "id,title,summary,status,event_id,event:events(id,started_at,coarse_place),claims(id,field,value_json,status,origin,confidence_band,confirmation_status,ai_run_id,source_correction_id,created_at,updated_at,claim_evidence(evidence_id))",
+        "id,title,summary,status,event_id,event:events(id,started_at,coarse_place,evidence(id,asset_id,field,value_json,validity,source_type)),claims(id,field,value_json,status,origin,confidence_band,confirmation_status,ai_run_id,source_correction_id,created_at,updated_at,claim_evidence(evidence_id))",
       )
       .eq("user_id", user.id)
       .eq("status", "active")
@@ -472,13 +491,25 @@ function scoreCandidate(
             claim.confidence_band === "high") &&
           claim.claim_evidence.length > 0),
   );
-  const groundedTerms = groundedClaims.map(({ value_json }) =>
-    displayValue(value_json),
-  );
-  const haystack = [title, summary, coarsePlace ?? "", ...groundedTerms]
-    .join(" ")
-    .normalize("NFKC")
-    .toLocaleLowerCase();
+  const document = buildMemorySearchDocument({
+    memoryId: String(row.id),
+    title,
+    summary,
+    capturedAt: startedAt,
+    coarsePlace,
+    semantics: eventSemantics(event.evidence),
+    claims: claims.map((claim) => ({
+      field: claim.field,
+      value: claim.value_json,
+      origin: claim.origin,
+      confidenceBand: claim.confidence_band,
+      confirmationStatus: claim.confirmation_status,
+      status: claim.status,
+      evidenceCount: claim.claim_evidence.length,
+    })),
+  });
+  const groundedTerms = document.groundedClaims.map(({ value }) => value);
+  const haystack = document.searchableText.toLocaleLowerCase();
   let score = 0;
   const reasons: string[] = [];
   if (locationScoped) {
@@ -550,7 +581,24 @@ function scoreCandidate(
     claims,
     structuredScore: Math.min(1, score),
     matchReasons: reasons,
+    document,
   };
+}
+
+function eventSemantics(rawEvidence: unknown): AssetSemanticRepresentation[] {
+  const byAsset = new Map<string, AssetSemanticRepresentation["facets"]>();
+  for (const raw of Array.isArray(rawEvidence) ? rawEvidence : []) {
+    const evidence = StoredSemanticEvidenceSchema.safeParse(raw);
+    if (!evidence.success) continue;
+    const assetId = evidence.data.asset_id ?? evidence.data.id;
+    byAsset.set(assetId, [
+      ...(byAsset.get(assetId) ?? []),
+      { type: evidence.data.field, ...evidence.data.value_json },
+    ]);
+  }
+  return normalizeAssetSemanticRepresentations(
+    [...byAsset].map(([assetId, facets]) => ({ assetId, facets })),
+  );
 }
 
 function toInterpretation(query: Parsed) {
