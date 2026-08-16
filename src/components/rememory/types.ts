@@ -54,11 +54,32 @@ export interface ClaimItem {
   evidenceIds: string[];
 }
 
+export interface MemoryRepresentativeImage {
+  assetId: string;
+  imageUrl: string | null;
+  alt: string;
+}
+
+export interface RelatedMemoryItem {
+  memoryId: string;
+  title: string;
+  capturedAt: string | null;
+  relationType: "before" | "same_place" | "same_activity";
+  relationState: "confirmed" | "inferred";
+  representativeImageUrl: string | null;
+}
+
 export interface MemoryDetailPayload {
   memory: MemoryThreadItem & {
     description?: string | null;
     updatedAt?: string | null;
   };
+  representatives?: {
+    identity: MemoryRepresentativeImage | null;
+    keyMoment: MemoryRepresentativeImage | null;
+    complement: MemoryRepresentativeImage | null;
+  };
+  relatedMemories?: RelatedMemoryItem[];
   reconstruction?: string | null;
   claims: ClaimItem[];
   evidence: EvidenceItem[];

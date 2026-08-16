@@ -1,5 +1,8 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+const pixel =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
 const memory = {
   id: "11111111-1111-4111-8111-111111111111",
   title: "神山でのロボット制作",
@@ -11,11 +14,32 @@ const memory = {
   state: "inferred",
   processingState: "ready",
   summary: "写真にはロボットを調整している様子が写っています。",
-  relationLabel: null,
-  relationState: null,
+  relationLabel: "「初めての試作」と同じ活動",
+  relationState: "confirmed",
   hasOpenGap: true,
   evidenceCount: 12,
 } as const;
+
+const relatedMemory = {
+  memoryId: "44444444-4444-4444-8444-444444444444",
+  title: "初めての試作",
+  capturedAt: "2026-03-20T09:00:00+09:00",
+  relationType: "before",
+  relationState: "confirmed",
+  representativeImageUrl: pixel,
+} as const;
+
+type DetailRepresentatives = {
+  identity: { assetId: string; imageUrl: string; alt: string } | null;
+  keyMoment: { assetId: string; imageUrl: string; alt: string } | null;
+  complement: { assetId: string; imageUrl: string; alt: string } | null;
+};
+
+const representatives: DetailRepresentatives = {
+  identity: { assetId: "asset-1", imageUrl: pixel, alt: "制作の全景" },
+  keyMoment: { assetId: "asset-5", imageUrl: pixel, alt: "調整中の場面" },
+  complement: { assetId: "asset-9", imageUrl: pixel, alt: "別角度の場面" },
+};
 
 function json(route: Route, data: unknown, status = 200) {
   return route.fulfill({
@@ -40,7 +64,13 @@ interface HeroApiObservations {
   } | null;
 }
 
-async function installHeroApi(page: Page): Promise<HeroApiObservations> {
+async function installHeroApi(
+  page: Page,
+  detail: {
+    representatives?: DetailRepresentatives;
+    relatedMemories?: (typeof relatedMemory)[];
+  } = {},
+): Promise<HeroApiObservations> {
   let confirmed = false;
   const observations: HeroApiObservations = {
     preparedFiles: [],
@@ -143,6 +173,8 @@ async function installHeroApi(page: Page): Promise<HeroApiObservations> {
           state: confirmed ? "confirmed" : "inferred",
           updatedAt: "2026-04-12T12:00:00+09:00",
         },
+        representatives: detail.representatives ?? representatives,
+        relatedMemories: detail.relatedMemories ?? [relatedMemory],
         reconstruction: memory.summary,
         claims: confirmed
           ? [
@@ -315,6 +347,14 @@ test("10 photos become a clarifiable, corrected and grounded memory", async ({
   await expect(page.getByText(memory.title)).toBeVisible();
   await expect(page.getByText(/ひとつだけ確認したい/u)).toBeVisible();
 
+  await page.goto(`/memories/${memory.id}`);
+  await expect(page.getByLabel("Memoryの写真").locator("img")).toHaveCount(3);
+  await expect(
+    page.getByRole("heading", { name: "この記憶につながる瞬間" }),
+  ).toBeVisible();
+  await expect(page.getByText("このMemoryより前")).toBeVisible();
+  await expect(page.getByText(relatedMemory.title)).toBeVisible();
+
   await page.goto("/search");
   await page
     .getByLabel("思い出したいこと")
@@ -423,6 +463,83 @@ test("processing refresh keeps the Memory list and expansion state visible", asy
   releaseRefresh?.();
   await expect(page.getByText("写真を保存済み・AI再構成中")).toHaveCount(0);
   await expect(memoryToggle).toHaveAttribute("aria-expanded", "false");
+});
+
+test("AI failure keeps the deterministic Memory usable", async ({ page }) => {
+  await page.route("**/api/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/me") {
+      return json(route, {
+        user: { id: "user-a", email: "hero@example.com" },
+      });
+    }
+    if (url.pathname === "/api/memories") {
+      return json(route, {
+        memories: [
+          {
+            ...memory,
+            title: "保存済みのMemory",
+            representativeImageUrl: null,
+            processingState: "failed",
+            relationLabel: null,
+            relationState: null,
+          },
+        ],
+        pendingConfirmationCount: 0,
+        partial: true,
+        partialMessage:
+          "写真と確定的な情報は保存済みです。AI再構成は未完了です。",
+      });
+    }
+    return route.fulfill({ status: 404 });
+  });
+
+  await page.goto("/home");
+  await expect(page.getByText("保存済みのMemory")).toBeVisible();
+  await expect(page.getByText(/写真と確定的な情報は保存済み/u)).toBeVisible();
+});
+
+test("Memory Space falls back for one or two representative photos", async ({
+  page,
+}) => {
+  await installHeroApi(page, {
+    representatives: { ...representatives, complement: null },
+    relatedMemories: [],
+  });
+  await page.goto(`/memories/${memory.id}`);
+  await expect(page.getByLabel("Memoryの写真").locator("img")).toHaveCount(2);
+  await expect(
+    page.getByRole("heading", { name: "この記憶につながる瞬間" }),
+  ).toHaveCount(0);
+});
+
+test("Memory Space promotes the only remaining representative", async ({
+  page,
+}) => {
+  await installHeroApi(page, {
+    representatives: {
+      identity: null,
+      keyMoment: representatives.keyMoment,
+      complement: null,
+    },
+    relatedMemories: [],
+  });
+  await page.goto(`/memories/${memory.id}`);
+  await expect(page.getByLabel("Memoryの写真").locator("img")).toHaveCount(1);
+});
+
+test("Memory Space remains usable without a representative photo", async ({
+  page,
+}) => {
+  await installHeroApi(page, {
+    representatives: { identity: null, keyMoment: null, complement: null },
+    relatedMemories: [],
+  });
+  await page.goto(`/memories/${memory.id}`);
+  await expect(page.getByText("表示できる代表写真はありません")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "この日にあったこと" }),
+  ).toBeVisible();
 });
 
 test("an unconfigured production boundary reports an honest recoverable error", async ({

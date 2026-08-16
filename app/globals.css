@@ -1954,13 +1954,36 @@ h3 {
   gap: 24px;
 }
 
-.memory-detail__hero > img,
+.memory-composition__primary,
 .memory-detail__no-image {
   width: 100%;
   aspect-ratio: 4 / 3;
   border-radius: var(--radius-md);
   object-fit: cover;
   background: var(--color-surface-muted);
+}
+
+.memory-composition__primary {
+  height: auto;
+}
+
+.memory-composition {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-composition__secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.memory-composition__secondary img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
 }
 
 .memory-detail__no-image {
@@ -2166,6 +2189,73 @@ h3 {
 
 .evidence-section__empty {
   padding: 0 0 20px;
+}
+
+.connected-moments {
+  border-top: 1px solid var(--color-border-strong);
+  padding-top: 24px;
+}
+
+.connected-moments h2 {
+  margin-bottom: 16px;
+  font-size: 28px;
+}
+
+.connected-moments ol {
+  display: grid;
+  gap: 0;
+}
+
+.connected-moments li {
+  display: grid;
+  min-height: 76px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border);
+  grid-template-columns: 22px auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.connected-moments__line {
+  width: 18px;
+  border-top: 2px solid var(--color-primary);
+}
+
+.connected-moments__line--inferred {
+  border-top-style: dotted;
+}
+
+.connected-moments__node {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-primary);
+  border-radius: 50%;
+}
+
+.connected-moments img {
+  width: 72px;
+  height: 54px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+}
+
+.connected-moments small,
+.connected-moments a,
+.connected-moments em {
+  display: block;
+}
+
+.connected-moments small,
+.connected-moments em {
+  color: var(--color-ink-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.connected-moments a {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: 18px;
 }
 
 .detail-confirmation-entry {
@@ -2851,7 +2941,6 @@ h3 {
     gap: 42px;
   }
 
-  .memory-detail__hero > img,
   .memory-detail__no-image {
     min-height: 420px;
   }
