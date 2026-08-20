@@ -38,6 +38,7 @@ function query(data: unknown, singleData = data) {
     update: vi.fn(),
     upsert: vi.fn(),
     eq: vi.fn(),
+    in: vi.fn(),
     order: vi.fn(),
     limit: vi.fn(),
     single: vi.fn().mockResolvedValue({ data: singleData, error: null }),
@@ -48,6 +49,7 @@ function query(data: unknown, singleData = data) {
   builder.update.mockReturnValue(builder);
   builder.upsert.mockReturnValue(builder);
   builder.eq.mockReturnValue(builder);
+  builder.in.mockReturnValue(builder);
   builder.order.mockReturnValue(builder);
   builder.limit.mockReturnValue(builder);
   return builder;

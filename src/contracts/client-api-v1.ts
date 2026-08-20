@@ -185,6 +185,10 @@ export const EvidenceTransportSchema = z.object({
   sourceLabel: z.string().nullable().optional(),
   imageUrl: SignedImageUrlSchema.optional(),
   capturedAt: z.string().nullable().optional(),
+  // Low-confidence vision observations carry the model's own uncertainty note
+  // and flag, so a client can ask the user about a specific photo.
+  uncertainty: z.string().nullable().optional(),
+  uncertain: z.boolean().optional(),
 });
 
 export const MemoryDetailTransportSchema = z.object({

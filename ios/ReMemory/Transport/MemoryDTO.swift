@@ -62,6 +62,10 @@ struct EvidenceDTO: Decodable {
     let id, label: String
     let detail, sourceLabel, imageUrl, capturedAt: String?
     let kind: String
+    // Low-confidence vision observations carry the model's own uncertainty note
+    // and flag so the client can ask about that specific photo.
+    let uncertainty: String?
+    let uncertain: Bool?
 }
 
 struct MemoryDetailItemDTO: Decodable {

@@ -215,7 +215,11 @@ export async function ingestUpload(input: {
           shouldAnalyze: preferences.usePhotos,
         }),
       );
-    } catch {
+    } catch (error) {
+      console.error(
+        "[ingestUpload] persistDeterministicSequence failed:",
+        error,
+      );
       deterministicFailures += 1;
     }
   }
@@ -563,9 +567,11 @@ async function validateAndStoreAsset(input: {
   };
 }
 
-function offsetText(getTimezoneOffsetMinutes: number): string {
-  // Date#getTimezoneOffset is UTC - local time, while ISO uses local - UTC.
-  const isoMinutes = -getTimezoneOffsetMinutes;
+function offsetText(offsetMinutes: number): string {
+  // `timezoneOffsetMinutes` is local − UTC (e.g. +540 for Asia/Tokyo), which is
+  // exactly the ISO 8601 offset sign convention. Negating it here would flip
+  // the offset and shift captured times by up to a day.
+  const isoMinutes = offsetMinutes;
   const sign = isoMinutes >= 0 ? "+" : "-";
   const absolute = Math.abs(isoMinutes);
   return `${sign}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
@@ -678,6 +684,41 @@ async function persistDeterministicSequence(input: {
         kind: "metadata_observation",
         field: "captured_at",
         value_json: { value: input.startedAt },
+        source_type: "metadata",
+        source_version: "exif-v1",
+        observed_at: input.startedAt,
+        validity: "valid",
+      });
+    }
+    // Temporal extent and time-of-day are cheap deterministic metadata that let
+    // the claim/gap stage make a more accurate guess than photos alone.
+    if (durationMinutes > 0) {
+      evidenceRows.push({
+        id: crypto.randomUUID(),
+        user_id: userId,
+        event_id: eventId,
+        asset_id: input.clusterAssets[0]?.id ?? null,
+        kind: "metadata_observation",
+        field: "sequence_duration_minutes",
+        value_json: { minutes: durationMinutes },
+        source_type: "metadata",
+        source_version: "exif-v1",
+        observed_at: input.startedAt,
+        validity: "valid",
+      });
+    }
+    const timeOfDay = timeOfDayBucket(
+      input.clusterAssets[0]?.capturedAtLocal ?? input.startedAt,
+    );
+    if (timeOfDay !== null) {
+      evidenceRows.push({
+        id: crypto.randomUUID(),
+        user_id: userId,
+        event_id: eventId,
+        asset_id: input.clusterAssets[0]?.id ?? null,
+        kind: "metadata_observation",
+        field: "time_of_day",
+        value_json: { label: timeOfDay },
         source_type: "metadata",
         source_version: "exif-v1",
         observed_at: input.startedAt,
@@ -1027,6 +1068,20 @@ function deterministicTitle(capturedAt: string | null | undefined): string {
   return match === null || match === undefined
     ? "日時未確認の記憶"
     : `${match[1]}年${Number(match[2])}月${Number(match[3])}日の記憶`;
+}
+
+/** Coarse local-time bucket so a claim can say "an evening", not just a date. */
+function timeOfDayBucket(
+  capturedAt: string | null | undefined,
+): "morning" | "daytime" | "evening" | "night" | null {
+  if (capturedAt === null || capturedAt === undefined) return null;
+  const parsed = Date.parse(capturedAt);
+  if (!Number.isFinite(parsed)) return null;
+  const hour = new Date(parsed).getHours();
+  if (hour >= 5 && hour < 11) return "morning";
+  if (hour >= 11 && hour < 17) return "daytime";
+  if (hour >= 17 && hour < 21) return "evening";
+  return "night";
 }
 
 async function createDeterministicClaim(

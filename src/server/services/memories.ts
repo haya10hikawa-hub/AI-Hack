@@ -261,6 +261,15 @@ function displayValue(value: unknown): string {
   return "構造化された根拠";
 }
 
+/** Extracts the model's own "what is this?" note from a low-confidence facet. */
+function uncertaintyText(value: unknown): string | null {
+  if (value === null || typeof value !== "object") return null;
+  const uncertainty = (value as Record<string, unknown>).uncertainty;
+  if (typeof uncertainty !== "string") return null;
+  const trimmed = uncertainty.trim();
+  return trimmed.length > 0 ? trimmed.slice(0, 300) : null;
+}
+
 async function signedDerivativeUrls(client: Client, paths: string[]) {
   const unique = [...new Set(paths.filter(Boolean))];
   if (unique.length === 0) return new Map<string, string>();
@@ -841,6 +850,10 @@ export async function getMemoryDetail(
         sourceLabel: entry.source_type,
         imageUrl: media ? (urls.get(media.path) ?? null) : null,
         capturedAt: entry.observed_at ?? media?.capturedAt ?? null,
+        // A low-confidence vision observation carries the model's own question
+        // about the photo. The native client can surface it on the photo itself.
+        uncertainty: uncertaintyText(entry.value_json),
+        uncertain: entry.validity === "uncertain",
       };
     }),
     partial:

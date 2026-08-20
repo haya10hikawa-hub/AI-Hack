@@ -23,6 +23,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>ローカルネットワーク上のRe:Memoryサーバー（写真の保存とAI解析）に接続するために使用します。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Memoryに追加する写真を選ぶために使用します。</string>
 	<key>UILaunchScreen</key>

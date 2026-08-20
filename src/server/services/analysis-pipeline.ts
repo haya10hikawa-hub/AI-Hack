@@ -6,7 +6,10 @@ import {
   assessContextCompleteness,
   evaluateMemoryGapGate,
 } from "@/src/domain/memory-assessment";
-import { describeEventSemantics } from "@/src/domain/event-semantics";
+import {
+  describeEventSemantics,
+  type AssetSemanticRepresentation,
+} from "@/src/domain/event-semantics";
 import { distillMemoryRepresentatives } from "@/src/domain/memory-distillation";
 import {
   SupabaseAICostLedger,
@@ -69,7 +72,9 @@ export async function analyzePersistedSequence(input: {
   const context = {
     userId: input.userId,
     requestId: input.requestId,
-    allowStrongModel: false,
+    // Uploads prefer accuracy over cost: route claim/gap synthesis to the
+    // strong model instead of the cheap local model.
+    allowStrongModel: true,
   };
   const resumeFrom = input.resumeFrom ?? "analysis";
   const [eventResult, memoryResult] = await Promise.all([
@@ -96,8 +101,14 @@ export async function analyzePersistedSequence(input: {
       : "AI再構成の要約はありません。";
 
   if (resumeFrom === "analysis") {
+    const sequenceMetadata = await loadSequenceMetadata(
+      input.database,
+      input.userId,
+      eventResult.data.id,
+    );
     const analysis = await provider.analyzeSequence(context, {
       sequenceId: input.sequenceId,
+      sequenceMetadata,
       assets: input.representativeAssets.slice(0, 4).map((asset) => ({
         assetId: asset.id,
         mimeType: "image/webp" as const,
@@ -117,13 +128,23 @@ export async function analyzePersistedSequence(input: {
     const semanticsByAsset = new Map(
       semantics.map((semantic) => [semantic.assetId, semantic]),
     );
+    const corroboration = corroborationCounts(semantics);
     const presentation = describeEventSemantics(semantics);
     const evidenceRows = semantics.flatMap((semantic) =>
       semantic.facets.map((facet) => {
+        const corroborated = (corroboration.get(facetKey(facet)) ?? 0) >= 2;
+        // A facet seen across multiple photos is stronger evidence than a
+        // single-photo glimpse: treat a corroborated low-confidence guess as
+        // medium confidence rather than discarding it as uncertain.
+        const confidenceBand =
+          corroborated && facet.confidenceBand === "low"
+            ? ("medium" as const)
+            : facet.confidenceBand;
         const value = {
           value: facet.value,
-          confidenceBand: facet.confidenceBand,
+          confidenceBand,
           uncertainty: facet.uncertainty,
+          corroborated,
         };
         return {
           id: crypto.randomUUID(),
@@ -142,7 +163,7 @@ export async function analyzePersistedSequence(input: {
             value,
           ),
           observed_at: null,
-          validity: facet.confidenceBand === "low" ? "uncertain" : "valid",
+          validity: confidenceBand === "low" ? "uncertain" : "valid",
         };
       }),
     );
@@ -216,6 +237,7 @@ export async function analyzePersistedSequence(input: {
     "ai_observation",
     "location",
     "system",
+    "user_statement",
   ]);
   const claimInputEvidence = (allEvidenceResult.data ?? [])
     .filter(({ source_type }) => allowedSourceTypes.has(source_type))
@@ -227,7 +249,8 @@ export async function analyzePersistedSequence(input: {
         | "metadata"
         | "ai_observation"
         | "location"
-        | "system",
+        | "system"
+        | "user_statement",
     }));
   if (resumeFrom !== "gap") {
     const generated = await provider.generateEventClaims(context, {
@@ -464,6 +487,44 @@ export async function analyzePersistedSequence(input: {
   return { complete: true, nextStage: null };
 }
 
+async function loadSequenceMetadata(
+  database: SupabaseClient,
+  userId: string,
+  eventId: string,
+): Promise<{
+  mediaCount: number | null;
+  durationMinutes: number | null;
+  timeOfDay: string | null;
+}> {
+  const { data, error } = await database
+    .from("evidence")
+    .select("field,value_json")
+    .eq("user_id", userId)
+    .eq("event_id", eventId)
+    .in("field", ["media_count", "sequence_duration_minutes", "time_of_day"]);
+  if (error !== null || data === null) {
+    return { mediaCount: null, durationMinutes: null, timeOfDay: null };
+  }
+  const byField = new Map<string, Record<string, unknown>>();
+  for (const row of data) {
+    const value = row.value_json;
+    if (value !== null && typeof value === "object") {
+      byField.set(row.field, value as Record<string, unknown>);
+    }
+  }
+  const numberOrNull = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+  const labelOrNull = (value: unknown): string | null =>
+    typeof value === "string" && value.length > 0 ? value : null;
+  return {
+    mediaCount: numberOrNull(byField.get("media_count")?.count),
+    durationMinutes: numberOrNull(
+      byField.get("sequence_duration_minutes")?.minutes,
+    ),
+    timeOfDay: labelOrNull(byField.get("time_of_day")?.label),
+  };
+}
+
 function preferredClaimsByField(claims: ActiveClaimSnapshot[]) {
   const preferred = new Map<string, ActiveClaimSnapshot>();
   for (const claim of [...claims].sort(
@@ -500,4 +561,25 @@ function stablePipelineKey(
     0,
     200,
   );
+}
+
+/** Counts how many distinct assets observed each normalized (type, value) facet. */
+function corroborationCounts(
+  semantics: readonly AssetSemanticRepresentation[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const semantic of semantics) {
+    const seen = new Set<string>();
+    for (const facet of semantic.facets) {
+      const key = facetKey(facet);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+function facetKey(facet: { type: string; value: string }): string {
+  return `${facet.type}\0${facet.value.toLocaleLowerCase("en-US")}`;
 }

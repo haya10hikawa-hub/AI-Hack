@@ -274,7 +274,9 @@ one Memory. The list is complete and safe to show; poll for the rest.
         "kind": "photo|metadata|user_correction|related_memory|other",
         "sourceLabel": "metadata",               // nullable
         "imageUrl": "https://…",                 // nullable, short-lived (§10)
-        "capturedAt": "…"                        // nullable
+        "capturedAt": "…",                       // nullable
+        "uncertainty": "…",                      // nullable, low-confidence photo observations only
+        "uncertain": true                        // optional, true when the observation is low-confidence
       }
     ],
     "partial": false,

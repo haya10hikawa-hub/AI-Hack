@@ -122,6 +122,7 @@ function modelFromEnvironment(
   environment: Environment,
 ) {
   const prefix = `AI_PRICE_${role}`;
+  const baseUrl = environment[`AI_BASE_URL_${role}`];
   return {
     model,
     inputUsdPerMillionTokens: parseNonNegativePrice(
@@ -137,6 +138,7 @@ function modelFromEnvironment(
       CONSERVATIVE_DEFAULT_PRICING.imageUsdEach,
     ),
     maxOutputTokens,
+    ...(baseUrl === undefined ? {} : { baseUrl }),
   };
 }
 

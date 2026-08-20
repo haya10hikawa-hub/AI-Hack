@@ -172,6 +172,7 @@ export class OrcaRouterProvider implements AIProvider {
     assertPrivacySafeSequenceInput(input);
     const promptInput = {
       sequenceId: input.sequenceId,
+      sequenceMetadata: input.sequenceMetadata,
       assets: input.assets.map(
         ({ assetId, mimeType, width, height, capturedAt, coarsePlace }) => ({
           assetId,
@@ -329,6 +330,10 @@ export class OrcaRouterProvider implements AIProvider {
       complexity: invocation.complexity,
     });
     const model = this.models[modelRole];
+    const endpoint =
+      model.baseUrl === undefined
+        ? this.endpoint
+        : completionEndpoint(model.baseUrl);
     const failureRun = (
       status: Exclude<AIRunMetadata["status"], "success">,
       estimatedCostUsd = 0,
@@ -444,7 +449,10 @@ export class OrcaRouterProvider implements AIProvider {
         attemptsStarted += 1;
         retryCount = attemptsStarted - 1;
         try {
-          const { response, responseText } = await this.fetchAndRead(body);
+          const { response, responseText } = await this.fetchAndRead(
+            body,
+            endpoint,
+          );
           if (!response.ok) {
             throw mapHttpError(response.status);
           }
@@ -617,11 +625,12 @@ export class OrcaRouterProvider implements AIProvider {
 
   private async fetchAndRead(
     body: string,
+    endpoint: URL,
   ): Promise<{ response: Response; responseText: string }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const response = await this.fetchImplementation(this.endpoint, {
+      const response = await this.fetchImplementation(endpoint, {
         method: "POST",
         headers: {
           authorization: `Bearer ${this.apiKey}`,

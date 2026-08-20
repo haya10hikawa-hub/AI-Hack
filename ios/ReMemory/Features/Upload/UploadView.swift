@@ -30,7 +30,8 @@ final class UploadViewModel: ObservableObject {
     func upload() async {
         guard let api, !photos.isEmpty else { message = "写真を1枚以上選んでください。"; return }
         guard let rawStorage = ProcessInfo.processInfo.environment["REMEMORY_SUPABASE_URL"],
-              let storageURL = URL(string: rawStorage), storageURL.scheme == "https" else {
+              let storageURL = URL(string: rawStorage),
+              storageURL.scheme == "https" || storageURL.scheme == "http" else {
             message = "写真保存先の設定を確認してください。"; return
         }
         working = true; state = .uploading; defer { working = false }

@@ -8,7 +8,7 @@ struct APIClient {
     init(environment: [String: String] = ProcessInfo.processInfo.environment,
          auth: any AuthProviding = EnvironmentAuthProvider(), session: URLSession = .shared) throws {
         guard let raw = environment["REMEMORY_API_BASE_URL"], let url = URL(string: raw),
-              url.scheme == "https" || (url.scheme == "http" && url.host == "localhost") else {
+              url.scheme == "https" || url.scheme == "http" else {
             throw APIError.invalidConfiguration
         }
         baseURL = url; self.auth = auth; self.session = session
