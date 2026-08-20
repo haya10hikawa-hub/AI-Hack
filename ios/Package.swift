@@ -10,14 +10,15 @@ let package = Package(
             name: "ReMemoryCore",
             path: "ReMemory",
             exclude: [
-                "App", "Components", "PreviewSupport", "Features/Upload",
+                "App", "Components", "DesignSystem", "PreviewSupport", "Features/Upload",
                 "Features/Memories/MemoriesView.swift", "Features/Memory/MemoryView.swift",
-                "Features/Recall/RecallView.swift", "Features/Confirmation/ConfirmationView.swift"
+                "Features/Recall/RecallView.swift", "Features/Map/MapView.swift"
             ],
             sources: [
                 "Networking", "Transport", "Presentation",
                 "Features/Memories/MemoriesViewModel.swift", "Features/Memory/MemoryViewModel.swift",
-                "Features/Recall/RecallViewModel.swift", "Features/Confirmation/ConfirmationViewModel.swift"
+                "Features/Recall/RecallViewModel.swift", "Features/Confirmation/ConfirmationViewModel.swift",
+                "Features/Map/MapViewModel.swift"
             ]
         ),
         .testTarget(name: "ReMemoryCoreTests", dependencies: ["ReMemoryCore"])

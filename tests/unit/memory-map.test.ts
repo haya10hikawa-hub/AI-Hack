@@ -4,6 +4,7 @@ import {
   coordinatesToMemoryMapCell,
   isAllowedMemoryMapCell,
   MEMORY_MAP_H3_RESOLUTION,
+  memoryMapCellCenter,
   progressMemoryMapState,
 } from "@/src/domain/memory-map";
 import { getResolution } from "h3-js";
@@ -23,6 +24,16 @@ describe("privacy-safe Memory Map cells", () => {
   it("rejects invalid exact coordinate inputs before conversion", () => {
     expect(() => coordinatesToMemoryMapCell(91, 135)).toThrow();
     expect(() => coordinatesToMemoryMapCell(35, Number.NaN)).toThrow();
+  });
+
+  it("derives only the deterministic center of an allowed cell", () => {
+    const cellId = coordinatesToMemoryMapCell(35, 135);
+    const center = memoryMapCellCenter(cellId);
+    expect(center).not.toBeNull();
+    expect(
+      coordinatesToMemoryMapCell(center!.latitude, center!.longitude),
+    ).toBe(cellId);
+    expect(memoryMapCellCenter("not-a-cell")).toBeNull();
   });
 
   it("allows only monotonic state progression", () => {

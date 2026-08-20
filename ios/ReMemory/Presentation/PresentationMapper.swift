@@ -39,6 +39,17 @@ enum PresentationMapper {
         )
     }
 
+    static func memoryMap(_ response: MemoryMapDTO, memories: [MemoryThreadItemDTO]) -> MemoryMapPresentation {
+        MemoryMapPresentation(
+            clusters: MemoryMapClusterBuilder.clusters(
+                from: response.cells,
+                memories: memories.map(memory)
+            ),
+            unplacedMemoryCount: MemoryMapClusterBuilder.unplacedMemoryCount(in: response.cells),
+            partialMessage: response.partialMessage
+        )
+    }
+
     static func confirmations(_ queue: ConfirmationQueueDTO) -> [ConfirmationPresentation] {
         queue.gaps.filter { $0.state == "open" }.map {
             ConfirmationPresentation(id: $0.id, memoryId: $0.memoryId, memoryTitle: $0.memoryTitle, question: $0.question, suggestion: $0.candidateLabel)
