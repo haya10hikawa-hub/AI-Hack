@@ -149,11 +149,11 @@ Use coarse / trusted spatial representation where possible rather than making ex
 
 Use the current planning model:
 
-| Plan | Price | Initial assumption |
-|---|---:|---|
-| Free | ¥0 | ~20–30 photos/month, basic Memory / Recall |
-| Founding Plus | ¥480/month | ~100 photos/month, Personal AI, richer Recall, Map |
-| Family β | ¥980–1,280/month | opt-in shared Family Memory / Recall |
+| Plan          |            Price | Initial assumption                                 |
+| ------------- | ---------------: | -------------------------------------------------- |
+| Free          |               ¥0 | ~20–30 photos/month, basic Memory / Recall         |
+| Founding Plus |       ¥480/month | ~100 photos/month, Personal AI, richer Recall, Map |
+| Family β      | ¥980–1,280/month | opt-in shared Family Memory / Recall               |
 
 Unit economics must be explicitly labeled as assumptions:
 

@@ -365,13 +365,13 @@ LLMコストを抑えるために、すべてを安いモデルへ置き換え�
 
 <!-- TODO #80/#81: OrcaRouter実測値で置換。推測値を掲載しない。 -->
 
-| 処理 | Model | 平均Latency | 平均Cost |
-|---|---|---:|---:|
-| Vision / Sequence | [TODO] | [TODO] | [TODO] |
-| Claim生成 | [TODO] | [TODO] | [TODO] |
-| Memory Gap | [TODO] | [TODO] | [TODO] |
-| Recall 1 turn | [TODO] | [TODO] | [TODO] |
-| 10 photos Hero Flow | — | [TODO] | [TODO] |
+| 処理                | Model  | 平均Latency | 平均Cost |
+| ------------------- | ------ | ----------: | -------: |
+| Vision / Sequence   | [TODO] |      [TODO] |   [TODO] |
+| Claim生成           | [TODO] |      [TODO] |   [TODO] |
+| Memory Gap          | [TODO] |      [TODO] |   [TODO] |
+| Recall 1 turn       | [TODO] |      [TODO] |   [TODO] |
+| 10 photos Hero Flow | —      |      [TODO] |   [TODO] |
 
 この表は提出直前の実Provider計測結果だけで埋めます。
 
@@ -427,20 +427,20 @@ Service roleはRLSをbypassできるため、privileged pathではsession由来�
 
 公開直前のmainを基準に、機能を次の3段階へ分類します。
 
-| 項目 | Status | 備考 |
-|---|---|---|
-| Auth / Private Upload | Implemented | 最終mainで確認 |
-| Event / Evidence / Claim / Memory | Implemented | provenanceを保持 |
-| Memory Gap / Confirmation | Implemented | user-confirmedを優先 |
-| Durable AI Job | Implemented | 実Provider forced-stopは最終検証対象 |
-| Search | Implemented | grounded / ambiguous / unknown |
-| Recall follow-up | [TODO] | #72-#79完了状況で確定 |
-| Memory Map | Implemented | coarse-cell privacy contract |
-| Hosted Production Hero Flow | [TODO] | #39-#51の結果で確定 |
-| Calendar Evidence | Roadmap | MVPでは未接続 |
-| camera-roll background sync | Roadmap | 未実装 |
-| E2EE / Zero-Knowledge | Roadmap | 現行システムの説明と混同しない |
-| Memory Opportunity | Roadmap | Map Phase 2 |
+| 項目                              | Status      | 備考                                 |
+| --------------------------------- | ----------- | ------------------------------------ |
+| Auth / Private Upload             | Implemented | 最終mainで確認                       |
+| Event / Evidence / Claim / Memory | Implemented | provenanceを保持                     |
+| Memory Gap / Confirmation         | Implemented | user-confirmedを優先                 |
+| Durable AI Job                    | Implemented | 実Provider forced-stopは最終検証対象 |
+| Search                            | Implemented | grounded / ambiguous / unknown       |
+| Recall follow-up                  | [TODO]      | #72-#79完了状況で確定                |
+| Memory Map                        | Implemented | coarse-cell privacy contract         |
+| Hosted Production Hero Flow       | [TODO]      | #39-#51の結果で確定                  |
+| Calendar Evidence                 | Roadmap     | MVPでは未接続                        |
+| camera-roll background sync       | Roadmap     | 未実装                               |
+| E2EE / Zero-Knowledge             | Roadmap     | 現行システムの説明と混同しない       |
+| Memory Opportunity                | Roadmap     | Map Phase 2                          |
 
 <!-- TODO #99: 全主張をコード・テスト・Production証拠に照合。 -->
 
