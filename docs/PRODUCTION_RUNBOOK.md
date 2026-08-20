@@ -29,8 +29,18 @@ pnpm dlx supabase@latest db push
 
 Confirm that the private `rememory-private` bucket exists and that migrations
 `202608130001`, `202608140002`, `202608140003`, `202608140004`,
-`202608140005`, and `202608140006` are present. The browser is read-only for
+`202608140005`, `202608140006`, `202608150001`, `202608150002`,
+`202608150003`, and `202608150004` are present. The browser is read-only for
 provenance data; server routes require `SUPABASE_SECRET_KEY`.
+
+`PLACE_PROVIDER_API_BASE_URL` enables the optional Place Picker. Configure a
+self-hosted or commercially authorized Nominatim-compatible endpoint whose
+terms allow interactive autocomplete. Exact provider coordinates are reduced
+server-side to an H3 cell and must not be logged or persisted. If the provider
+is unavailable, photo ingestion continues without a selected place.
+`/api/health` reports this optional dependency as
+`checks.placeProviderConfiguration`; it does not make the whole upload service
+unhealthy because place selection is intentionally fail-open.
 
 ## 3. Auth URLs
 

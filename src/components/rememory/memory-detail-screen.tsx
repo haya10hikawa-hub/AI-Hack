@@ -300,7 +300,18 @@ export function MemoryDetailScreen() {
                       <MapPin aria-hidden="true" size={17} />
                       場所
                     </dt>
-                    <dd>{data.memory.placeLabel || "未確認"}</dd>
+                    <dd>
+                      {data.memory.placeLabel || "未確認"}
+                      <small>
+                        {stateLabel(data.memory.placeState ?? "unknown")}
+                      </small>
+                      {data.memory.place?.area ? (
+                        <small>{data.memory.place.area}</small>
+                      ) : null}
+                      {data.memory.place?.category ? (
+                        <small>{data.memory.place.category}</small>
+                      ) : null}
+                    </dd>
                   </div>
                   <div>
                     <dt>
@@ -314,6 +325,15 @@ export function MemoryDetailScreen() {
                     </dd>
                   </div>
                 </dl>
+                {data.memory.place?.mapCellId ? (
+                  <Link
+                    className="memory-place-map-link"
+                    href={`/map?cellId=${encodeURIComponent(data.memory.place.mapCellId)}`}
+                  >
+                    <MapPin aria-hidden="true" size={17} />
+                    Memory Mapでこの場所を見る
+                  </Link>
+                ) : null}
                 {data.memory.description ? (
                   <p className="memory-detail__description">
                     {data.memory.description}

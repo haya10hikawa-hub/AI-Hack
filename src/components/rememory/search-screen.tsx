@@ -307,6 +307,15 @@ export function SearchScreen() {
                     </ul>
                   </details>
                 ) : null}
+                {result.place?.mapCellId ? (
+                  <Link
+                    className="memory-place-map-link"
+                    href={`/map?cellId=${encodeURIComponent(result.place.mapCellId)}`}
+                  >
+                    この場所をMemory Mapで見る
+                    <ArrowRight aria-hidden="true" size={18} />
+                  </Link>
+                ) : null}
                 {result.feedbackEnabled && result.candidates[0] ? (
                   <div
                     className="search-feedback"

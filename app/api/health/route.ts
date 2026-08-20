@@ -15,6 +15,9 @@ export async function GET() {
     process.env.AI_MODEL_CHAT_CHEAP,
     process.env.AI_MODEL_EVENT_STRONG,
   ].every((value) => typeof value === "string" && value.length > 0);
+  const placeProviderConfigured =
+    typeof process.env.PLACE_PROVIDER_API_BASE_URL === "string" &&
+    process.env.PLACE_PROVIDER_API_BASE_URL.length > 0;
   let databaseReady = false;
   let storageReady = false;
   try {
@@ -39,6 +42,7 @@ export async function GET() {
         database: databaseReady,
         storage: storageReady,
         aiConfiguration: aiConfigReady,
+        placeProviderConfiguration: placeProviderConfigured,
       },
       checkedAt: new Date().toISOString(),
     },

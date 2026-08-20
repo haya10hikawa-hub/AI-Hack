@@ -58,7 +58,10 @@ export const UserCorrectionSchema = z
     id: z.string().min(1).max(200),
     userId: z.string().min(1).max(200),
     memoryId: z.string().min(1).max(200),
-    targetClaimId: z.string().min(1).max(200),
+    // A user-selected value may be created without replacing an earlier
+    // claim. The database correction contract represents that provenance with
+    // a null target while still requiring createdClaimId.
+    targetClaimId: z.string().min(1).max(200).nullable(),
     action: UserCorrectionActionSchema,
     value: JsonValueSchema.nullable(),
     createdClaimId: z.string().min(1).max(200).nullable(),

@@ -37,6 +37,8 @@ const privateTables = [
   "coarse_location_labels",
   "memory_map_cells",
   "memory_map_cell_memories",
+  "canonical_places",
+  "memory_places",
 ] as const;
 
 describe("baseline migration security contract", () => {
@@ -196,6 +198,31 @@ describe("baseline migration security contract", () => {
     );
     expect(sql).not.toMatch(
       /grant execute on function public\.reveal_memory_map_cell[^;]+to authenticated/iu,
+    );
+  });
+
+  it("stores provider-verified places without exact coordinates", () => {
+    const placeTable = sql.match(
+      /create table public\.canonical_places[\s\S]*?\n\);/iu,
+    )?.[0];
+    expect(placeTable).toBeTruthy();
+    expect(placeTable).toMatch(/unique \(provider, provider_place_id\)/iu);
+    expect(placeTable).toMatch(/map_cell_id text not null/iu);
+    expect(placeTable).not.toMatch(
+      /\b(?:lat|lng|latitude|longitude)\s+(?:numeric|double|text)/iu,
+    );
+    expect(sql).toMatch(
+      /create table public\.memory_places[\s\S]*source = 'user_selected'/iu,
+    );
+    expect(sql).toMatch(
+      /revoke all on table public\.canonical_places, public\.memory_places from anon, authenticated/iu,
+    );
+    expect(sql).toMatch(/create policy canonical_places_owner_select/iu);
+    expect(sql).toMatch(
+      /memory_place\.place_id = canonical_places\.id[\s\S]*memory_place\.user_id = \(select auth\.uid\(\)\)/iu,
+    );
+    expect(sql).toMatch(
+      /grant select on table public\.canonical_places, public\.memory_places to authenticated/iu,
     );
   });
 });

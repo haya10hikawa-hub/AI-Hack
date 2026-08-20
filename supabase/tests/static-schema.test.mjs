@@ -33,6 +33,8 @@ const privateTables = [
   "coarse_location_labels",
   "memory_map_cells",
   "memory_map_cell_memories",
+  "canonical_places",
+  "memory_places",
 ];
 
 for (const table of privateTables) {
@@ -75,6 +77,19 @@ assert.match(migration, /unique \(memory_id, role\)/);
 assert.match(migration, /unique \(memory_id, asset_id\)/);
 assert.match(migration, /create unique index memory_relations_dedupe_idx/);
 assert.match(migration, /source_memory_id::text < target_memory_id::text/);
+assert.match(migration, /create table public\.canonical_places/);
+assert.match(migration, /unique \(provider, provider_place_id\)/);
+assert.match(migration, /source = 'user_selected'/);
+assert.match(migration, /create policy canonical_places_owner_select/);
+assert.match(
+  migration,
+  /grant select on table public\.canonical_places, public\.memory_places to authenticated/,
+);
+assert.doesNotMatch(
+  migration.match(/create table public\.canonical_places[\s\S]*?\n\);/)?.[0] ??
+    "",
+  /\b(?:lat|lng|latitude|longitude)\s+(?:numeric|double|text)/i,
+);
 assert.match(migration, /create table public\.memory_map_cells/);
 assert.match(migration, /cell_id text not null/);
 assert.doesNotMatch(

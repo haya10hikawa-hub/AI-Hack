@@ -91,6 +91,23 @@ const RelatedMemoryRowSchema = z.object({
   event: z.union([EventSchema, z.array(EventSchema)]).nullable(),
 });
 
+const CanonicalPlaceSchema = z.object({
+  id: z.string().uuid(),
+  provider: z.string(),
+  provider_place_id: z.string(),
+  place_label: z.string(),
+  coarse_area: z.string().nullable(),
+  map_cell_id: z.string(),
+  place_category: z.string().nullable(),
+});
+
+const MemoryPlaceSchema = z.object({
+  memory_id: z.string().uuid(),
+  source: z.literal("user_selected"),
+  place: z
+    .union([CanonicalPlaceSchema, z.array(CanonicalPlaceSchema)])
+    .nullable(),
+});
 type Client = SupabaseClient;
 
 export class RepositoryError extends Error {
@@ -129,6 +146,99 @@ function relationLabel(
     case "same_activity":
       return `「${title}」と同じ活動`;
   }
+}
+
+function oneCanonicalPlace(value: z.infer<typeof MemoryPlaceSchema>["place"]) {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+export interface MemoryPlaceSummary {
+  canonicalId: string | null;
+  provider: string | null;
+  providerPlaceId: string | null;
+  label: string;
+  area: string | null;
+  category: string | null;
+  source: "user_selected" | "legacy";
+  truthState: "confirmed" | "inferred" | "evidence" | "unknown";
+  mapCellId: string | null;
+}
+
+export async function loadMemoryPlaces(
+  client: Client,
+  userId: string,
+  memoryIds: string[],
+) {
+  const uniqueMemoryIds = [...new Set(memoryIds)];
+  if (uniqueMemoryIds.length === 0) {
+    return new Map<string, MemoryPlaceSummary>();
+  }
+  const [placeResult, mapLinkResult] = await Promise.all([
+    client
+      .from("memory_places")
+      .select(
+        "memory_id,source,place:canonical_places(id,provider,provider_place_id,place_label,coarse_area,map_cell_id,place_category)",
+      )
+      .eq("user_id", userId)
+      .in("memory_id", uniqueMemoryIds),
+    client
+      .from("memory_map_cell_memories")
+      .select("memory_id,cell_id")
+      .eq("user_id", userId)
+      .in("memory_id", uniqueMemoryIds),
+  ]);
+  if (placeResult.error !== null || mapLinkResult.error !== null) {
+    throw new RepositoryError("load_memory_places");
+  }
+  const trustedMapCellByMemory = new Map<string, string>(
+    (mapLinkResult.data ?? []).flatMap((row) =>
+      typeof row.memory_id === "string" && typeof row.cell_id === "string"
+        ? [[row.memory_id, row.cell_id] as const]
+        : [],
+    ),
+  );
+  return new Map<string, MemoryPlaceSummary>(
+    (placeResult.data ?? []).flatMap((row) => {
+      const parsed = MemoryPlaceSchema.safeParse(row);
+      if (!parsed.success) return [];
+      const place = oneCanonicalPlace(parsed.data.place);
+      if (place === null) return [];
+      const linkedCell = trustedMapCellByMemory.get(parsed.data.memory_id);
+      return [
+        [
+          parsed.data.memory_id,
+          {
+            canonicalId: place.id,
+            provider: place.provider,
+            providerPlaceId: place.provider_place_id,
+            label: place.place_label,
+            area: place.coarse_area,
+            category: place.place_category,
+            source: parsed.data.source,
+            truthState: "confirmed",
+            mapCellId:
+              linkedCell === place.map_cell_id ? place.map_cell_id : null,
+          },
+        ] as const,
+      ];
+    }),
+  );
+}
+
+function placeTruthState(claims: z.infer<typeof ClaimSchema>[]) {
+  const claim = claims.find(
+    ({ field, status }) =>
+      ["location", "place", "coarse_place"].includes(field) &&
+      status === "active",
+  );
+  if (claim === undefined) return "unknown" as const;
+  if (
+    claim.origin === "user" &&
+    claim.confirmation_status === "user_confirmed"
+  ) {
+    return "confirmed" as const;
+  }
+  return claim.origin === "ai" ? ("inferred" as const) : ("evidence" as const);
 }
 
 function displayValue(value: unknown): string {
@@ -190,6 +300,7 @@ export async function getMemoryThread(client: Client, userId: string) {
     .map((memory) => oneEvent(memory.event)?.id ?? null)
     .filter((id): id is string => id !== null);
 
+  const memoryPlacesPromise = loadMemoryPlaces(client, userId, memoryIds);
   const [
     claimResult,
     gapResult,
@@ -277,6 +388,7 @@ export async function getMemoryThread(client: Client, userId: string) {
   ) {
     throw new RepositoryError("assemble_memory_thread");
   }
+  const memoryPlaces = await memoryPlacesPromise;
 
   const claims = (claimResult.data ?? [])
     .map((row) => ClaimSchema.safeParse({ ...row, claim_evidence: [] }))
@@ -411,11 +523,31 @@ export async function getMemoryThread(client: Client, userId: string) {
         : relation.source_memory_id === memory.id
           ? relation.target_memory_id
           : relation.source_memory_id;
+    const canonicalPlace = memoryPlaces.get(memory.id) ?? null;
+    const fallbackPlaceLabel = event?.coarse_place ?? null;
+    const fallbackPlaceState = placeTruthState(memoryClaims);
+    const place: MemoryPlaceSummary | null =
+      canonicalPlace ??
+      (fallbackPlaceLabel === null
+        ? null
+        : {
+            canonicalId: null,
+            provider: null,
+            providerPlaceId: null,
+            label: fallbackPlaceLabel,
+            area: null,
+            category: null,
+            source: "legacy",
+            truthState: fallbackPlaceState,
+            mapCellId: null,
+          });
     return {
       id: memory.id,
       title: memory.title,
       capturedAt: event?.started_at ?? null,
-      placeLabel: event?.coarse_place ?? null,
+      placeLabel: place?.label ?? null,
+      placeState: place?.truthState ?? "unknown",
+      place,
       photoCount: sequenceId ? (photoCount.get(sequenceId) ?? 0) : 0,
       representativeImageUrl: imagePath ? (urls.get(imagePath) ?? null) : null,
       representativeImageAlt: `${memory.title}の代表写真`,

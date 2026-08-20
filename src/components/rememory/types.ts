@@ -12,11 +12,25 @@ export type ProcessingState =
   | "partial"
   | "failed";
 
+export interface MemoryPlaceSummary {
+  canonicalId: string | null;
+  provider: string | null;
+  providerPlaceId: string | null;
+  label: string;
+  area: string | null;
+  category: string | null;
+  source: "user_selected" | "legacy";
+  truthState: "confirmed" | "inferred" | "evidence" | "unknown";
+  mapCellId: string | null;
+}
+
 export interface MemoryThreadItem {
   id: string;
   title: string;
   capturedAt: string | null;
   placeLabel: string | null;
+  placeState?: "confirmed" | "inferred" | "evidence" | "unknown";
+  place?: MemoryPlaceSummary | null;
   photoCount: number;
   representativeImageUrl: string | null;
   representativeImageAlt?: string | null;
@@ -132,6 +146,7 @@ export interface SearchPayload {
   partial?: boolean;
   partialMessage?: string | null;
   feedbackEnabled?: boolean;
+  place?: MemoryPlaceSummary | null;
 }
 
 export interface UploadAcceptedItem {
@@ -154,6 +169,18 @@ export interface UploadPayload {
   sequenceIds?: string[];
   processingState: ProcessingState;
   message?: string | null;
+  placeStatus?: "selected" | "not_selected" | "unavailable";
+}
+
+export interface PlaceCandidate {
+  id: string;
+  name: string;
+  area: string | null;
+  category: string | null;
+}
+
+export interface PlaceSearchPayload {
+  candidates: PlaceCandidate[];
 }
 
 export interface PrivacyAiSettings {

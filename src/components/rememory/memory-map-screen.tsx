@@ -13,7 +13,10 @@ import {
 } from "lucide-react";
 import { cellToLocalIj, gridDisk } from "h3-js";
 
-import { coordinatesToMemoryMapCell } from "@/src/domain/memory-map";
+import {
+  coordinatesToMemoryMapCell,
+  isAllowedMemoryMapCell,
+} from "@/src/domain/memory-map";
 
 import { apiRequest, jsonBody } from "./api-client";
 import { AppShell } from "./app-shell";
@@ -127,6 +130,20 @@ export function MemoryMapScreen() {
     data?.cells[0] ??
     null;
   const unauthenticated = resource.error?.status === 401;
+
+  useEffect(() => {
+    if (!data?.cells.length) return;
+    const requestedCell = new URLSearchParams(window.location.search).get(
+      "cellId",
+    );
+    if (
+      requestedCell !== null &&
+      isAllowedMemoryMapCell(requestedCell) &&
+      data.cells.some(({ cellId }) => cellId === requestedCell)
+    ) {
+      queueMicrotask(() => setSelectedCellId(requestedCell));
+    }
+  }, [data?.cells]);
 
   useEffect(() => {
     if (

@@ -22,7 +22,9 @@ import { assertMutationAllowed, requestId } from "@/src/server/http/security";
 import { dataResponse, routeError } from "@/src/server/http/responses";
 import {
   getMemoryThread,
+  loadMemoryPlaces,
   RepositoryError,
+  type MemoryPlaceSummary,
 } from "@/src/server/services/memories";
 import {
   normalizeSearchFeedbackQuery,
@@ -141,6 +143,7 @@ export async function POST(request: NextRequest) {
         partial: thread.partial ?? false,
         partialMessage: thread.partialMessage ?? null,
         feedbackEnabled: false,
+        place: null,
       });
     }
 
@@ -224,12 +227,20 @@ export async function POST(request: NextRequest) {
     const memoryResult = await memoryQuery;
     if (memoryResult.error !== null)
       throw new RepositoryError("retrieve_memory_candidates");
+    const memoryPlaces = await loadMemoryPlaces(
+      supabase,
+      user.id,
+      (memoryResult.data ?? []).flatMap((row) =>
+        typeof row.id === "string" ? [row.id] : [],
+      ),
+    );
     const candidates = (memoryResult.data ?? []).map((row) =>
       scoreCandidate(
         row,
         parsed.data,
         feedbackByMemoryId.get(String(row.id)) ?? null,
         mapMemoryIds !== null,
+        memoryPlaces.get(String(row.id)) ?? null,
       ),
     );
     const eligible = candidates.filter(
@@ -249,6 +260,7 @@ export async function POST(request: NextRequest) {
           ? "Memoryを再構成しています。完了後に同じ言葉でもう一度検索してください。"
           : null,
         feedbackEnabled,
+        place: null,
       });
     }
 
@@ -320,6 +332,7 @@ export async function POST(request: NextRequest) {
         partial: thread.partial,
         partialMessage: thread.partialMessage,
         feedbackEnabled,
+        place: null,
       });
     }
     if (decision.kind === "unknown") {
@@ -333,6 +346,7 @@ export async function POST(request: NextRequest) {
         partial: thread.partial,
         partialMessage: thread.partialMessage,
         feedbackEnabled,
+        place: null,
       });
     }
 
@@ -443,6 +457,13 @@ export async function POST(request: NextRequest) {
       partial: thread.partial,
       partialMessage: thread.partialMessage,
       feedbackEnabled,
+      place:
+        answered.data.mode === "answer" &&
+        selected.place?.truthState !== "unknown" &&
+        selected.placeClaimId !== null &&
+        citedIds.has(selected.placeClaimId)
+          ? selected.place
+          : null,
     });
   } catch (error) {
     if (auditContext !== undefined) {
@@ -465,6 +486,7 @@ function scoreCandidate(
   query: Parsed,
   feedback: "helpful" | "not_helpful" | null,
   locationScoped: boolean,
+  canonicalPlace: MemoryPlaceSummary | null,
 ) {
   const eventValue = Array.isArray(row.event) ? row.event[0] : row.event;
   const event = (eventValue ?? {}) as Record<string, unknown>;
@@ -478,7 +500,8 @@ function scoreCandidate(
     typeof row.title === "string" ? row.title : "タイトル未設定の記憶";
   const summary = typeof row.summary === "string" ? row.summary : "";
   const coarsePlace =
-    typeof event.coarse_place === "string" ? event.coarse_place : null;
+    canonicalPlace?.label ??
+    (typeof event.coarse_place === "string" ? event.coarse_place : null);
   const startedAt =
     typeof event.started_at === "string" ? event.started_at : null;
   const groundedClaims = claims.filter(
@@ -491,6 +514,31 @@ function scoreCandidate(
             claim.confidence_band === "high") &&
           claim.claim_evidence.length > 0),
   );
+  const groundedLocationClaim = groundedClaims.find(({ field }) =>
+    ["location", "place", "coarse_place"].includes(field),
+  );
+  const place: MemoryPlaceSummary | null =
+    canonicalPlace ??
+    (coarsePlace === null
+      ? null
+      : {
+          canonicalId: null,
+          provider: null,
+          providerPlaceId: null,
+          label: coarsePlace,
+          area: null,
+          category: null,
+          source: "legacy",
+          truthState:
+            groundedLocationClaim === undefined
+              ? "unknown"
+              : groundedLocationClaim.origin === "user"
+                ? "confirmed"
+                : groundedLocationClaim.origin === "ai"
+                  ? "inferred"
+                  : "evidence",
+          mapCellId: null,
+        });
   const document = buildMemorySearchDocument({
     memoryId: String(row.id),
     title,
@@ -509,7 +557,14 @@ function scoreCandidate(
     })),
   });
   const groundedTerms = document.groundedClaims.map(({ value }) => value);
-  const haystack = document.searchableText.toLocaleLowerCase();
+  const haystack = [
+    document.searchableText,
+    canonicalPlace?.area ?? "",
+    canonicalPlace?.category ?? "",
+  ]
+    .join(" ")
+    .normalize("NFKC")
+    .toLocaleLowerCase();
   let score = 0;
   const reasons: string[] = [];
   if (locationScoped) {
@@ -579,6 +634,8 @@ function scoreCandidate(
     coarsePlace,
     groundedTerms,
     claims,
+    place,
+    placeClaimId: groundedLocationClaim?.id ?? null,
     structuredScore: Math.min(1, score),
     matchReasons: reasons,
     document,

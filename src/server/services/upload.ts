@@ -16,6 +16,7 @@ import {
   type SequenceAsset,
 } from "@/src/domain/sequence";
 import type { RuntimeConfig } from "@/src/server/config";
+import type { SelectedPlace } from "@/src/domain/place";
 import { RepositoryError } from "@/src/server/services/memories";
 
 type Client = SupabaseClient;
@@ -88,12 +89,13 @@ export async function ingestUpload(input: {
   config: RuntimeConfig;
   timezoneOffsetMinutes: number | null;
   coarsePlace?: string | null;
+  selectedPlace?: SelectedPlace | null;
   resolveCoarseLocation?: (location: CoarseLocation) => Promise<string | null>;
 }): Promise<IngestionResult> {
   const { client, userId, config } = input;
   const preferenceResult = await client
     .from("user_preferences")
-    .select("use_photos,use_captured_at,use_location")
+    .select("use_photos,use_captured_at,use_location,memory_map_enabled")
     .eq("user_id", userId)
     .maybeSingle();
   if (preferenceResult.error !== null)
@@ -102,6 +104,7 @@ export async function ingestUpload(input: {
     usePhotos: preferenceResult.data?.use_photos !== false,
     useCapturedAt: preferenceResult.data?.use_captured_at !== false,
     useLocation: preferenceResult.data?.use_location === true,
+    useMemoryMap: preferenceResult.data?.memory_map_enabled === true,
   };
 
   const stored: StoredAsset[] = [];
@@ -207,6 +210,8 @@ export async function ingestUpload(input: {
           startedAt: cluster.startedAt,
           endedAt: cluster.endedAt,
           coarsePlace: cluster.coarseLocationKey,
+          selectedPlace: input.selectedPlace ?? null,
+          useMemoryMap: preferences.useMemoryMap,
           shouldAnalyze: preferences.usePhotos,
         }),
       );
@@ -574,6 +579,8 @@ async function persistDeterministicSequence(input: {
   startedAt: string | null;
   endedAt: string | null;
   coarsePlace: string | null;
+  selectedPlace: SelectedPlace | null;
+  useMemoryMap: boolean;
   shouldAnalyze: boolean;
 }): Promise<IngestionResult["sequences"][number]> {
   const { client, userId } = input;
@@ -677,7 +684,7 @@ async function persistDeterministicSequence(input: {
         validity: "valid",
       });
     }
-    const coarsePlace = input.coarsePlace;
+    const coarsePlace = input.selectedPlace?.displayName ?? input.coarsePlace;
     let placeEvidenceId: string | null = null;
     if (coarsePlace !== null) {
       placeEvidenceId = crypto.randomUUID();
@@ -694,9 +701,12 @@ async function persistDeterministicSequence(input: {
         source_type: coarsePlace.startsWith("grid:")
           ? "location"
           : "user_statement",
-        source_version: coarsePlace.startsWith("grid:")
-          ? "grid-v1"
-          : "upload-label-v1",
+        source_version:
+          input.selectedPlace !== null
+            ? "place-provider-v1"
+            : coarsePlace.startsWith("grid:")
+              ? "grid-v1"
+              : "upload-label-v1",
         observed_at: input.startedAt,
         validity: "valid",
       });
@@ -719,6 +729,15 @@ async function persistDeterministicSequence(input: {
       share_status: "none",
     });
     if (memoryInsert.error !== null) throw new RepositoryError("create_memory");
+
+    if (input.selectedPlace !== null) {
+      await persistSelectedPlace(client, {
+        userId,
+        memoryId,
+        place: input.selectedPlace,
+        useMemoryMap: input.useMemoryMap,
+      });
+    }
 
     const mediaClaimId = await createDeterministicClaim(client, {
       userId,
@@ -755,7 +774,17 @@ async function persistDeterministicSequence(input: {
               userId,
               memoryId,
               field: "location",
-              value: { label: coarsePlace },
+              value:
+                input.selectedPlace === null
+                  ? { label: coarsePlace }
+                  : {
+                      label: input.selectedPlace.displayName,
+                      provider: input.selectedPlace.provider,
+                      providerPlaceId: input.selectedPlace.providerPlaceId,
+                      coarseArea: input.selectedPlace.coarseArea,
+                      category: input.selectedPlace.category,
+                      source: "user_selected",
+                    },
               idempotencyKey: stableUuidFromText(
                 `${sequenceId}:user-location:${coarsePlace}`,
               ),
@@ -808,6 +837,69 @@ async function persistDeterministicSequence(input: {
       ? input.clusterAssets.filter(({ id }) => representativeIds.has(id))
       : [],
   };
+}
+
+async function persistSelectedPlace(
+  client: Client,
+  input: {
+    userId: string;
+    memoryId: string;
+    place: SelectedPlace;
+    useMemoryMap: boolean;
+  },
+) {
+  const canonical = await client
+    .from("canonical_places")
+    .upsert(
+      {
+        provider: input.place.provider,
+        provider_place_id: input.place.providerPlaceId,
+        place_label: input.place.displayName,
+        coarse_area: input.place.coarseArea,
+        map_cell_id: input.place.mapCellId,
+        place_category: input.place.category,
+      },
+      { onConflict: "provider,provider_place_id" },
+    )
+    .select("id")
+    .single();
+  if (canonical.error !== null || typeof canonical.data?.id !== "string") {
+    throw new RepositoryError("persist_canonical_place");
+  }
+  const linked = await client.from("memory_places").upsert(
+    {
+      user_id: input.userId,
+      memory_id: input.memoryId,
+      place_id: canonical.data.id,
+      source: "user_selected",
+    },
+    { onConflict: "memory_id" },
+  );
+  if (linked.error !== null) throw new RepositoryError("link_memory_place");
+
+  if (!input.useMemoryMap) return;
+  const cell = await client.rpc("reveal_memory_map_cell", {
+    p_user_id: input.userId,
+    p_cell_id: input.place.mapCellId,
+  });
+  if (cell.error !== null) throw new RepositoryError("persist_place_map_cell");
+  const cellLabel = await client
+    .from("memory_map_cells")
+    .update({ coarse_place: input.place.displayName })
+    .eq("user_id", input.userId)
+    .eq("cell_id", input.place.mapCellId);
+  if (cellLabel.error !== null)
+    throw new RepositoryError("label_place_map_cell");
+  const mapLink = await client.from("memory_map_cell_memories").upsert(
+    {
+      user_id: input.userId,
+      cell_id: input.place.mapCellId,
+      memory_id: input.memoryId,
+    },
+    { onConflict: "user_id,cell_id,memory_id" },
+  );
+  if (mapLink.error !== null)
+    throw new RepositoryError("link_place_map_memory");
 }
 
 async function loadRetrySequences(input: {
